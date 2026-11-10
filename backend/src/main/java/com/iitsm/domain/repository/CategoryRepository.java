@@ -1,0 +1,17 @@
+package com.iitsm.domain.repository;
+
+import com.iitsm.domain.model.Category;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface CategoryRepository {
+
+    Category save(Category c);
+
+    Optional<Category> findById(String id);
+
+    List<Category> findAll();
+
+    List<Category> findAllActive();
+}
