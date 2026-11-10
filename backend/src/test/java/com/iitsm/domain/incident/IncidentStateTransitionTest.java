@@ -17,18 +17,18 @@ class IncidentStateTransitionTest {
 
     private record ActionInvoker(String name, Function<IncidentState, IncidentState> invoke) {}
 
-    private static final Map<String, ActionInvoker> ACTIONS = Map.of(
-            "classify", new ActionInvoker("classify", IncidentState::classify),
-            "assign", new ActionInvoker("assign", IncidentState::assign),
-            "unassign", new ActionInvoker("unassign", IncidentState::unassign),
-            "acknowledge", new ActionInvoker("acknowledge", IncidentState::acknowledge),
-            "startWork", new ActionInvoker("startWork", IncidentState::startWork),
-            "requestInfo", new ActionInvoker("requestInfo", IncidentState::requestInfo),
-            "receiveInfo", new ActionInvoker("receiveInfo", IncidentState::receiveInfo),
-            "resolve", new ActionInvoker("resolve", IncidentState::resolve),
-            "rejectResolution", new ActionInvoker("rejectResolution", IncidentState::rejectResolution),
-            "verify", new ActionInvoker("verify", IncidentState::verify),
-            "close", new ActionInvoker("close", IncidentState::close)
+    private static final Map<String, ActionInvoker> ACTIONS = Map.ofEntries(
+            Map.entry("classify", new ActionInvoker("classify", IncidentState::classify)),
+            Map.entry("assign", new ActionInvoker("assign", IncidentState::assign)),
+            Map.entry("unassign", new ActionInvoker("unassign", IncidentState::unassign)),
+            Map.entry("acknowledge", new ActionInvoker("acknowledge", IncidentState::acknowledge)),
+            Map.entry("startWork", new ActionInvoker("startWork", IncidentState::startWork)),
+            Map.entry("requestInfo", new ActionInvoker("requestInfo", IncidentState::requestInfo)),
+            Map.entry("receiveInfo", new ActionInvoker("receiveInfo", IncidentState::receiveInfo)),
+            Map.entry("resolve", new ActionInvoker("resolve", IncidentState::resolve)),
+            Map.entry("rejectResolution", new ActionInvoker("rejectResolution", IncidentState::rejectResolution)),
+            Map.entry("verify", new ActionInvoker("verify", IncidentState::verify)),
+            Map.entry("close", new ActionInvoker("close", IncidentState::close))
     );
 
     // The 12 valid (CurrentStatus, Action) -> ExpectedNextStatus transitions per §J.1
