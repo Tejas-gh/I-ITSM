@@ -1,5 +1,3 @@
 spring:
   application:
     name: iitsm
-  profiles:
-    active: local
