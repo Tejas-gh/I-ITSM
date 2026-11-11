@@ -1,0 +1,91 @@
+/**
+ * Frozen I-ITSM constants matching docs/api-contract.md and CONTRACT_FREEZE.md.
+ */
+
+export const ROLES = {
+  EMPLOYEE: 'EMPLOYEE',
+  TECHNICIAN: 'TECHNICIAN',
+  TEAM_LEAD: 'TEAM_LEAD',
+  ADMINISTRATOR: 'ADMINISTRATOR',
+  IT_MANAGER: 'IT_MANAGER',
+};
+
+export const ROLE_GROUPS = {
+  EMPLOYEE: [ROLES.EMPLOYEE],
+  TECHNICIAN: [ROLES.TECHNICIAN, ROLES.TEAM_LEAD],
+  ADMINISTRATOR: [ROLES.ADMINISTRATOR, ROLES.IT_MANAGER],
+};
+
+export const INCIDENT_STATUS = {
+  NEW: 'NEW',
+  CLASSIFIED: 'CLASSIFIED',
+  ASSIGNED: 'ASSIGNED',
+  ACKNOWLEDGED: 'ACKNOWLEDGED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  WAITING_FOR_USER: 'WAITING_FOR_USER',
+  RESOLVED: 'RESOLVED',
+  VERIFIED: 'VERIFIED',
+  CLOSED: 'CLOSED',
+};
+
+export const PRIORITY_LEVEL = {
+  P1: 'P1',
+  P2: 'P2',
+  P3: 'P3',
+  P4: 'P4',
+};
+
+export const PRIORITY_LABELS = {
+  P1: 'Critical',
+  P2: 'High',
+  P3: 'Medium',
+  P4: 'Low',
+};
+
+export const IMPACT = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL',
+};
+
+export const URGENCY = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL',
+};
+
+export const BUSINESS_CRITICALITY = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL',
+};
+
+export const WEIGHTS = {
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+  CRITICAL: 4,
+};
+
+export const CATEGORY_SOURCE = {
+  MANUAL: 'MANUAL',
+  KEYWORD: 'KEYWORD',
+  LLM: 'LLM',
+};
+
+export const SLA_STATUS = {
+  ON_TRACK: 'ON_TRACK',
+  WARNING: 'WARNING',
+  BREACHED: 'BREACHED',
+  MET: 'MET',
+};
+
+export const NOTE_TYPE = {
+  INVESTIGATION: 'INVESTIGATION',
+  INFO_REQUEST: 'INFO_REQUEST',
+  INFO_RESPONSE: 'INFO_RESPONSE',
+  ADDITIONAL_INFO: 'ADDITIONAL_INFO',
+};
