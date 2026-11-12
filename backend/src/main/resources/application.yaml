@@ -10,3 +10,14 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+iitsm:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}      # no default: set JWT_SECRET (>= 32 characters)
+      expiration: 1h
+  bootstrap:
+    admin:                        # first administrator; created only if none exists and a password is set
+      id: ${BOOTSTRAP_ADMIN_ID:}
+      name: ${BOOTSTRAP_ADMIN_NAME:}
+      email: ${BOOTSTRAP_ADMIN_EMAIL:}
+      password: ${BOOTSTRAP_ADMIN_PASSWORD:}
