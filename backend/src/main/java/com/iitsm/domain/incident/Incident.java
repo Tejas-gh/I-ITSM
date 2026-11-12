@@ -112,6 +112,108 @@ public final class Incident {
 
     // ===== Getters =====
 
+    // ===== Restoration (persistence reconstitution) =====
+
+    /** Internal constructor used only by {@link #restore}; the public constructor remains the only creation path. */
+    private Incident(String id, String title, String description, User reporter, ItService service,
+                     int affectedUsers, Instant createdAt) {
+        this.id = id;
+        this.title = title;
+        this.description = description;
+        this.reporter = reporter;
+        this.service = service;
+        this.affectedUsers = affectedUsers;
+        this.createdAt = createdAt;
+    }
+
+    /**
+     * Rebuilds an incident from previously persisted state without replaying its lifecycle.
+     * Intended for repository implementations (Phase 2 mappers). The status is turned into its state
+     * object through {@link IncidentStates#of(IncidentStatus)}. Field-level invariants are validated;
+     * nothing is mutated on failure (the instance is only returned once fully built).
+     */
+    public static Incident restore(String id, String title, String description, User reporter, ItService service,
+                                   Category category, Category suggestedCategory, CategorySource categorySource,
+                                   Impact impact, Urgency urgency, int affectedUsers,
+                                   PriorityLevel priority, int priorityScore, Instant createdAt,
+                                   IncidentStatus status,
+                                   Technician assignedTechnician, Instant assignedAt, Instant acknowledgedAt,
+                                   Instant verifiedAt, Instant closedAt, String closedById, String closureNote,
+                                   Instant responseDeadline, Instant resolutionDeadline,
+                                   Instant waitingSince, Duration pausedDuration,
+                                   List<IncidentNote> notes, Resolution resolution, Feedback feedback) {
+        String cleanId = requireNonBlank(id, "id");
+        requireNonBlank(title, "title");
+        requireNonBlank(description, "description");
+        if (reporter == null) {
+            throw new InvalidInputException("reporter must not be null");
+        }
+        if (service == null) {
+            throw new InvalidInputException("service must not be null");
+        }
+        if (category == null) {
+            throw new InvalidInputException("category must not be null");
+        }
+        if (categorySource == null) {
+            throw new InvalidInputException("categorySource must not be null");
+        }
+        if (impact == null || urgency == null || priority == null || status == null) {
+            throw new InvalidInputException("impact, urgency, priority and status must not be null");
+        }
+        if (createdAt == null) {
+            throw new InvalidInputException("createdAt must not be null");
+        }
+        if (affectedUsers < 1) {
+            throw new InvalidInputException("affectedUsers must be >= 1");
+        }
+        if (priorityScore < 1) {
+            throw new InvalidInputException("priorityScore must be >= 1");
+        }
+        if (pausedDuration == null || pausedDuration.isNegative()) {
+            throw new InvalidInputException("pausedDuration must not be null or negative");
+        }
+        if (notes == null) {
+            throw new InvalidInputException("notes must not be null");
+        }
+        if (categorySource != CategorySource.MANUAL
+                && (suggestedCategory == null || !suggestedCategory.getId().equals(category.getId()))) {
+            throw new InvalidInputException(
+                    "suggestedCategory must be present and equal to category when categorySource is not MANUAL");
+        }
+        if ((responseDeadline == null) != (resolutionDeadline == null)) {
+            throw new InvalidInputException("responseDeadline and resolutionDeadline must both be set or both absent");
+        }
+        if (responseDeadline != null
+                && (responseDeadline.isBefore(createdAt) || resolutionDeadline.isBefore(responseDeadline))) {
+            throw new InvalidInputException("deadlines must satisfy createdAt <= response <= resolution");
+        }
+
+        Incident incident = new Incident(cleanId, title, description, reporter, service, affectedUsers, createdAt);
+        incident.category = category;
+        incident.suggestedCategory = suggestedCategory;
+        incident.categorySource = categorySource;
+        incident.impact = impact;
+        incident.urgency = urgency;
+        incident.priority = priority;
+        incident.priorityScore = priorityScore;
+        incident.state = IncidentStates.of(status);
+        incident.assignedTechnician = assignedTechnician;
+        incident.assignedAt = assignedAt;
+        incident.acknowledgedAt = acknowledgedAt;
+        incident.verifiedAt = verifiedAt;
+        incident.closedAt = closedAt;
+        incident.closedById = closedById;
+        incident.closureNote = closureNote;
+        incident.responseDeadline = responseDeadline;
+        incident.resolutionDeadline = resolutionDeadline;
+        incident.waitingSince = waitingSince;
+        incident.pausedDuration = pausedDuration;
+        incident.notes.addAll(notes);
+        incident.resolution = resolution;
+        incident.feedback = feedback;
+        return incident;
+    }
+
     public String getId() { return id; }
     public String getTitle() { return title; }
     public String getDescription() { return description; }
