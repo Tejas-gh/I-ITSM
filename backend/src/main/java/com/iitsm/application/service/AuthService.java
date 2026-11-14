@@ -103,7 +103,12 @@ public final class AuthService {
         return Optional.of((Administrator) createAccount(draft, password));
     }
 
-    private User createAccount(UserDraft draft, String rawPassword) {
+    /**
+     * Creates an account of any role: validates the draft through {@link UserFactory}, rejects a duplicate id and an
+     * unacceptable password, then stores the user and the BCrypt hash of the password. Used by registration,
+     * the first-administrator bootstrap and administrator-created users.
+     */
+    public User createAccount(UserDraft draft, String rawPassword) {
         User user = userFactory.create(draft);
         requireAcceptablePassword(rawPassword);
         if (users.findById(user.getId()).isPresent()) {

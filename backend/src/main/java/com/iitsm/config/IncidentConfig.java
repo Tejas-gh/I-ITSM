@@ -1,6 +1,7 @@
 package com.iitsm.config;
 
 import java.time.Clock;
+import java.util.List;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,7 +10,9 @@ import com.iitsm.application.service.IncidentPermissionPolicy;
 import com.iitsm.application.service.IncidentSearchService;
 import com.iitsm.application.service.IncidentService;
 import com.iitsm.domain.assignment.AssignmentStrategy;
+import com.iitsm.domain.assignment.LoadBasedAssignmentStrategy;
 import com.iitsm.domain.assignment.SkillBasedAssignmentStrategy;
+import com.iitsm.domain.assignment.SwitchableAssignmentStrategy;
 import com.iitsm.domain.classification.CategoryClassifier;
 import com.iitsm.domain.classification.NoOpClassifier;
 import com.iitsm.domain.event.DomainEventPublisher;
@@ -64,10 +67,15 @@ public class IncidentConfig {
         return new SlaEvaluator();
     }
 
-    /** Default assignment strategy; switching strategies at runtime is a later (admin) gate. */
+    /**
+     * The assignment strategy used by {@link IncidentService}: skill-based by default, switchable at runtime to
+     * load-based through {@code AssignmentStrategyAdminService} (the selection is held in memory).
+     */
     @Bean
-    AssignmentStrategy assignmentStrategy() {
-        return new SkillBasedAssignmentStrategy();
+    SwitchableAssignmentStrategy assignmentStrategy() {
+        SkillBasedAssignmentStrategy skillBased = new SkillBasedAssignmentStrategy();
+        return new SwitchableAssignmentStrategy(List.of(skillBased, new LoadBasedAssignmentStrategy()),
+                skillBased.name());
     }
 
     @Bean
