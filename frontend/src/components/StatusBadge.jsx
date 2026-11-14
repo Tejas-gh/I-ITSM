@@ -1,4 +1,3 @@
-import React from 'react';
 import { INCIDENT_STATUS } from '../constants/itsmConstants';
 
 const STATUS_CONFIG = {

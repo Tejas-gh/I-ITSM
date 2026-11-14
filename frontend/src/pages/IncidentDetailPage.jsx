@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { incidentApi, referenceApi } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
@@ -9,10 +9,7 @@ import LifecycleStepper from '../components/LifecycleStepper';
 import ActionModal from '../components/ActionModal';
 import {
   INCIDENT_STATUS,
-  PRIORITY_LEVEL,
   ROLE_GROUPS,
-  IMPACT,
-  URGENCY,
 } from '../constants/itsmConstants';
 
 export default function IncidentDetailPage() {
@@ -37,8 +34,6 @@ export default function IncidentDetailPage() {
 
   const loadIncident = async () => {
     try {
-      setLoading(true);
-      setError(null);
       const [data, techList] = await Promise.all([
         incidentApi.getIncident(id),
         referenceApi.listTechnicians(),
@@ -47,13 +42,37 @@ export default function IncidentDetailPage() {
       setTechnicians(techList);
     } catch (err) {
       setError(err.message || 'Failed to load incident details');
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadIncident();
+    let ignore = false;
+    const fetchInitial = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [data, techList] = await Promise.all([
+          incidentApi.getIncident(id),
+          referenceApi.listTechnicians(),
+        ]);
+        if (!ignore) {
+          setIncident(data);
+          setTechnicians(techList);
+        }
+      } catch (err) {
+        if (!ignore) {
+          setError(err.message || 'Failed to load incident details');
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    };
+    fetchInitial();
+    return () => {
+      ignore = true;
+    };
   }, [id, currentUser]);
 
   if (loading) {
@@ -161,7 +180,7 @@ export default function IncidentDetailPage() {
       actionLabel: 'Submit Response',
       actionType: 'text',
       onConfirm: async (text) => {
-        await incidentApi.respondInfo(incident.id, text, currentUser.id);
+        await incidentApi.respondToInfo(incident.id, text, currentUser.id);
         await loadIncident();
       },
     });

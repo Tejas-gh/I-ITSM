@@ -1,11 +1,9 @@
-import React from 'react';
-import { NavLink, Link, useNavigate } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { incidentApi } from '../api/apiClient';
+import { incidentApi, USE_MOCK } from '../api/apiClient';
 
 export default function Navbar() {
-  const { currentUser, availableUsers, selectUser } = useAuth();
-  const navigate = useNavigate();
+  const { currentUser, availableUsers, selectUser, logout, isEmployee, isAdmin } = useAuth();
 
   const handleResetData = () => {
     if (window.confirm('Reset all mock incident data back to original seed?')) {
@@ -90,12 +88,16 @@ export default function Navbar() {
             <NavLink to="/incidents" style={navLinkStyle}>
               Incidents
             </NavLink>
-            <NavLink to="/incidents/new" style={navLinkStyle}>
-              + Report Incident
-            </NavLink>
-            <NavLink to="/technicians" style={navLinkStyle}>
-              Technicians
-            </NavLink>
+            {(USE_MOCK || isEmployee) && (
+              <NavLink to="/incidents/new" style={navLinkStyle}>
+                + Report Incident
+              </NavLink>
+            )}
+            {(USE_MOCK || isAdmin) && (
+              <NavLink to="/technicians" style={navLinkStyle}>
+                Technicians
+              </NavLink>
+            )}
           </nav>
         </div>
 
@@ -113,43 +115,67 @@ export default function Navbar() {
             }}
           >
             <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>Logged in as:</span>
-            <select
-              value={currentUser.id}
-              onChange={(e) => selectUser(e.target.value)}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                fontWeight: '600',
-                fontSize: '13px',
-                color: '#0f172a',
-                cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              {availableUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.role})
-                </option>
-              ))}
-            </select>
+            {USE_MOCK ? (
+              <select
+                value={currentUser.id}
+                onChange={(e) => selectUser(e.target.value)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  color: '#0f172a',
+                  cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                {availableUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.role})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span style={{ fontWeight: '600', fontSize: '13px', color: '#0f172a' }}>
+                {currentUser.id} ({currentUser.role})
+              </span>
+            )}
           </div>
 
-          <button
-            onClick={handleResetData}
-            title="Reset Mock Store"
-            style={{
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: '500',
-              borderRadius: '6px',
-              border: '1px solid #cbd5e1',
-              backgroundColor: '#ffffff',
-              color: '#475569',
-              cursor: 'pointer',
-            }}
-          >
-            ↺ Reset Seed
-          </button>
+          {USE_MOCK ? (
+            <button
+              onClick={handleResetData}
+              title="Reset Mock Store"
+              style={{
+                padding: '6px 12px',
+                fontSize: '12px',
+                fontWeight: '500',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+                color: '#475569',
+                cursor: 'pointer',
+              }}
+            >
+              ↺ Reset Seed
+            </button>
+          ) : (
+            <button
+              onClick={logout}
+              style={{
+                padding: '6px 12px',
+                fontSize: '12px',
+                fontWeight: '500',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+                color: '#475569',
+                cursor: 'pointer',
+              }}
+            >
+              Sign out
+            </button>
+          )}
         </div>
       </div>
     </header>

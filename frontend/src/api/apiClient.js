@@ -12,7 +12,8 @@ import {
   CATEGORY_SOURCE,
 } from '../constants/itsmConstants';
 
-const USE_MOCK = true;
+// Mock mode is opt-in: set VITE_USE_MOCKS=true (see .env.example). The default is the real backend.
+export const USE_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 // In-memory / localStorage mock store so changes persist across page reloads
@@ -81,21 +82,68 @@ function calculateSlaDeadlines(priority, createdAtDate) {
   };
 }
 
+const TOKEN_KEY = 'iitsm_jwt';
+
+/** Event fired when the backend rejects the stored token (expired/invalid) so the UI can sign out. */
+export const UNAUTHORIZED_EVENT = 'iitsm:unauthorized';
+
+export const tokenStore = {
+  get() {
+    try {
+      return localStorage.getItem(TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  },
+  set(token) {
+    try {
+      localStorage.setItem(TOKEN_KEY, token);
+    } catch {
+      // ignore storage failures; the user will simply have to sign in again
+    }
+  },
+  clear() {
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      // ignore
+    }
+  },
+};
+
+/** Decodes the claims of a JWT (no signature check; the backend is the authority). Returns null if malformed. */
+export function decodeJwt(token) {
+  try {
+    const payload = token.split('.')[1];
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64.padEnd(Math.ceil(b64.length / 4) * 4, '=');
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Standard HTTP fetcher for real backend mode
+ * Standard HTTP fetcher for real backend mode.
+ * Options: skipAuth = do not send the bearer token (login/register: Spring rejects a stale token even on public routes).
  */
 async function http(path, options = {}) {
-  const token = localStorage.getItem('iitsm_jwt');
+  const { skipAuth = false, headers: extraHeaders, ...rest } = options;
+  const token = skipAuth ? null : tokenStore.get();
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...options.headers,
+    ...extraHeaders,
   };
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, { ...rest, headers });
+  } catch {
+    const networkError = new Error('Cannot reach the server. Check that the backend is running and try again.');
+    networkError.code = 'NETWORK_ERROR';
+    throw networkError;
+  }
 
   if (!response.ok) {
     let errorPayload = null;
@@ -103,6 +151,10 @@ async function http(path, options = {}) {
       errorPayload = await response.json();
     } catch {
       // not JSON
+    }
+    if (response.status === 401 && !skipAuth) {
+      tokenStore.clear();
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
     }
     const error = new Error(errorPayload?.message || `HTTP ${response.status} Error`);
     error.status = response.status;
@@ -112,8 +164,37 @@ async function http(path, options = {}) {
   }
 
   if (response.status === 204) return null;
-  return response.json();
+  // Some endpoints answer 200 with an empty body (e.g. suggest-category with no suggestion).
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
 }
+
+/**
+ * Authentication API (real backend only): POST /api/auth/login and /api/auth/register.
+ */
+export const authApi = {
+  async login(id, password) {
+    const result = await http('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ id, password }),
+      skipAuth: true,
+    });
+    tokenStore.set(result.accessToken);
+    return result;
+  },
+
+  async register({ id, name, email, department, password }) {
+    return http('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ id, name, email, department, password }),
+      skipAuth: true,
+    });
+  },
+
+  logout() {
+    tokenStore.clear();
+  },
+};
 
 /**
  * Incident API client
@@ -532,19 +613,38 @@ export const incidentApi = {
 };
 
 /**
- * Reference data API
+ * Reference data API.
+ * Admin-only lists (users, technicians) answer 403 for other roles; those callers get an empty list.
  */
+async function listOrEmptyWhenForbidden(path) {
+  try {
+    return await http(path);
+  } catch (err) {
+    if (err.status === 403) return [];
+    throw err;
+  }
+}
+
 export const referenceApi = {
   async listServices() {
+    if (!USE_MOCK) return http('/services');
     return [...INITIAL_SERVICES];
   },
   async listCategories() {
+    if (!USE_MOCK) return http('/categories');
     return [...INITIAL_CATEGORIES];
   },
+  // Categories a reporter may choose for a new incident.
+  async listActiveCategories() {
+    if (!USE_MOCK) return http('/categories/active');
+    return INITIAL_CATEGORIES.filter((c) => c.active !== false);
+  },
   async listUsers() {
+    if (!USE_MOCK) return listOrEmptyWhenForbidden('/admin/users');
     return [...INITIAL_USERS];
   },
   async listTechnicians() {
+    if (!USE_MOCK) return listOrEmptyWhenForbidden('/admin/technicians');
     return INITIAL_USERS.filter((u) => u.role === 'TECHNICIAN' || u.role === 'TEAM_LEAD');
   },
 };

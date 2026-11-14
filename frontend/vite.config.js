@@ -15,5 +15,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
+    // The existing client tests exercise the mock store; real-backend behaviour is tested in realApi.test.js.
+    env: { VITE_USE_MOCKS: 'true' },
   },
 })

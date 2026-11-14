@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { incidentApi, referenceApi } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';

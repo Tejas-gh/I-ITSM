@@ -1,4 +1,3 @@
-import React from 'react';
 import { SLA_STATUS } from '../constants/itsmConstants';
 
 export default function SlaBadge({ deadline, doneAt, label = 'SLA' }) {
@@ -11,10 +10,10 @@ export default function SlaBadge({ deadline, doneAt, label = 'SLA' }) {
   const now = new Date();
 
   let status = SLA_STATUS.ON_TRACK;
-  let text = '';
-  let color = '#0f766e';
-  let bg = '#ccfbf1';
-  let border = '#99f6e4';
+  let text;
+  let color;
+  let bg;
+  let border;
 
   if (isDone) {
     const doneDate = new Date(doneAt);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { referenceApi, incidentApi } from '../api/apiClient';
 import { INCIDENT_STATUS } from '../constants/itsmConstants';
 

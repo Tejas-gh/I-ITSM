@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { incidentApi, referenceApi, calculatePriorityScore } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
@@ -7,7 +7,6 @@ import {
   IMPACT,
   URGENCY,
   CATEGORY_SOURCE,
-  PRIORITY_LABELS,
 } from '../constants/itsmConstants';
 
 export default function CreateIncidentPage() {
@@ -39,7 +38,7 @@ export default function CreateIncidentPage() {
       try {
         const [srvList, catList] = await Promise.all([
           referenceApi.listServices(),
-          referenceApi.listCategories(),
+          referenceApi.listActiveCategories(),
         ]);
         setServices(srvList);
         setCategories(catList);
