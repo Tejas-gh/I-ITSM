@@ -112,3 +112,40 @@ When `receiveInfo` is called, `activeWait` is added to cumulative `pausedDuratio
 2. `WARNING` (if either is `WARNING`)
 3. `MET` (if both response and resolution are `MET`)
 4. `ON_TRACK` (otherwise)
+
+---
+
+## 3. Audit Logging & Notification Flow (Phase 2 Gates B5–B7)
+
+Phase 2 connects domain lifecycle events to persistent audit trails and multi-channel notifications through a decoupled, synchronous event-driven pipeline.
+
+### 3.1 Event-Driven Pipeline & Listener Order
+All incident state changes and operational lifecycle actions trigger domain events published via `DomainEventPublisher`.
+* **Registration Order:** Listeners are registered in `AuditNotificationConfig` strictly ensuring `AuditEventListener` executes prior to `NotificationEventListener`.
+* **Audit Persistence First:** The audit trail captures an immutable chronological log of state transitions before any external or in-app notifications are generated.
+
+```
++------------------+         +----------------------+         +---------------------------+
+| Incident Service | ----->  | DomainEventPublisher | ----->  | 1. AuditEventListener     |
++------------------+         +----------------------+         |    (Critical, DB persist) |
+                                       |                      +---------------------------+
+                                       |                      +---------------------------+
+                                       +--------------------> | 2. NotificationEventListener
+                                                              |    (Non-critical dispatch)|
+                                                              +---------------------------+
+```
+
+### 3.2 Audit Field Completeness (7-Field Model)
+Every lifecycle action persists an `AuditEntry` containing:
+1. `occurredAt`: Exact timestamp of the event.
+2. `actorId`: Identity of the user performing the action.
+3. `incidentId`: Unique incident identifier.
+4. `previousStatus`: Status prior to the event (null exclusively for `INCIDENT_CREATED`).
+5. `newStatus`: Incident status resulting from the event.
+6. `action`: Machine-readable action code (e.g., `INCIDENT_CREATED`, `INCIDENT_ASSIGNED`, `INCIDENT_RESOLVED`, `INCIDENT_CLOSED`).
+7. `description`: Human-readable summary or comment.
+
+### 3.3 Transactional Resilience & Non-Critical Failure Isolation (Rollback Trap D1)
+* **Critical Failures:** `AuditEventListener.critical()` returns `true`. If database persistence of the audit record fails, the failure immediately propagates, causing the incident transaction to roll back, thereby preventing unaudited mutations.
+* **Non-Critical Failures:** `NotificationEventListener.critical()` returns `false`. Individual channel deliveries (`InAppNotificationChannel`, `SimulatedEmailNotificationChannel`) catch delivery errors and log warnings without propagating exceptions. Consequently, transient notification channel failures never mark the outer incident transaction as rollback-only or fail the business operation.
+

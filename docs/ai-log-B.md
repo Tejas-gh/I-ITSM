@@ -20,3 +20,31 @@
   - Test Helpers: `ServiceFixture`, `StubAssignmentStrategy`, `RecordingListener`.
   - Documentation: `docs/sla-and-lifecycle-design.md`.
 - **Outcome:** Total test suite passed at 272 tests with 0 failures, 0 errors.
+
+## Session 3: Gate B5 (2026-11-13)
+- **Task:** Implemented Gate B5 (Audit & Notification Spring configuration and persistence integration).
+- **Files Created/Updated:**
+  - `com.iitsm.config`: `AuditNotificationConfig` (subscribes `AuditEventListener` strictly before `NotificationEventListener`).
+  - Unit & Integration Tests: `AuditNotificationConfigTest`, `JpaNotificationRepositoryTest`.
+- **Outcome:** Clean compile, listener subscription ordering verified, repositories wired into Spring context.
+
+## Session 4: Gate B6 (2026-11-13)
+- **Task:** Implemented Gate B6 (Reporting and Admin REST Controllers and DTOs).
+- **Files Created/Updated:**
+  - `com.iitsm.config`: `ReportingAdminConfig`.
+  - `com.iitsm.api`: `AuditController`, `NotificationController`, `DashboardController`, `ItServiceAdminController`, `CategoryAdminController`, `SlaPolicyAdminController`.
+  - `com.iitsm.api.dto`: 11 DTO records for audit, notification, dashboard metrics, IT services, categories, and SLA policies.
+  - Unit Tests: `AuditControllerTest`, `NotificationControllerTest`, `DashboardControllerTest`, `CatalogAdminControllersTest` (using `TestingAuthenticationToken`).
+- **Outcome:** All reporting and admin endpoints tested with 100% pass rate.
+
+## Session 5: Gate B7 (2026-11-14)
+- **Task:** Implemented Gate B7 (Audit trail, notification delivery, listener order, and transactional resilience integration tests).
+- **Files Created/Updated:**
+  - `com.iitsm.integration`:
+    - `AuditTrailIntegrationTest`: Full 11-step incident lifecycle audit verification proving all 7 audit fields in chronological order.
+    - `NotificationIntegrationTest`: End-to-end notification dispatch, unread/read queries, mark-read lifecycle, and recipient isolation.
+    - `EventListenerOrderTest`: Proves `AuditEventListener` strictly executes before `NotificationEventListener`.
+    - `TransactionEventBehaviorTest`: Proves critical listener failures roll back incident transactions and non-critical notification failures do not poison or roll back outer transactions (Rollback Trap D1).
+  - Documentation: `docs/sla-and-lifecycle-design.md`, `docs/ai-log-B.md`.
+- **Outcome:** Full test suite passed (685 tests, 0 failures, 0 errors).
+
