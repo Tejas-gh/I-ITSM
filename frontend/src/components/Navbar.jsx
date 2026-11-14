@@ -1,6 +1,7 @@
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { incidentApi, USE_MOCK } from '../api/apiClient';
+import NotificationBell from './NotificationBell';
 
 export default function Navbar() {
   const { currentUser, availableUsers, selectUser, logout, isEmployee, isAdmin } = useAuth();
@@ -101,8 +102,10 @@ export default function Navbar() {
           </nav>
         </div>
 
-        {/* Right: Active Role Switcher & Tools */}
+        {/* Right: Active Role Switcher, Notifications & Tools */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {!USE_MOCK && <NotificationBell />}
+
           <div
             style={{
               display: 'flex',

@@ -648,3 +648,30 @@ export const referenceApi = {
     return INITIAL_USERS.filter((u) => u.role === 'TECHNICIAN' || u.role === 'TEAM_LEAD');
   },
 };
+
+/**
+ * Notification API client.
+ */
+export const notificationApi = {
+  async getNotifications() {
+    if (!USE_MOCK) {
+      return http('/notifications');
+    }
+    return [];
+  },
+
+  async getUnreadNotifications() {
+    if (!USE_MOCK) {
+      return http('/notifications/unread');
+    }
+    return [];
+  },
+
+  async markAsRead(id) {
+    if (!USE_MOCK) {
+      return http(`/notifications/${id}/read`, { method: 'POST' });
+    }
+    return null;
+  },
+};
+

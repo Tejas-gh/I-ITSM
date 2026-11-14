@@ -134,4 +134,29 @@ describe('API client in real-backend mode', () => {
     expect(claims).toMatchObject({ sub: 'ADMIN01', role: 'ADMINISTRATOR' });
     expect(api.decodeJwt('not-a-jwt')).toBeNull();
   });
+
+  it('notificationApi calls real backend endpoints with stored bearer token', async () => {
+    const api = await loadRealClient();
+    localStorage.setItem('iitsm_jwt', 'token-123');
+    const fetchMock = vi.fn().mockImplementation((url) => {
+      if (url.includes('/read')) {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      return Promise.resolve(jsonResponse([{ id: 'NOTIF-1', title: 'Incident Assigned', read: false }]));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const all = await api.notificationApi.getNotifications();
+    expect(all).toHaveLength(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/notifications');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer token-123');
+
+    const unread = await api.notificationApi.getUnreadNotifications();
+    expect(unread).toHaveLength(1);
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/notifications/unread');
+
+    await api.notificationApi.markAsRead('NOTIF-1');
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/notifications/NOTIF-1/read');
+    expect(fetchMock.mock.calls[2][1].method).toBe('POST');
+  });
 });

@@ -48,16 +48,18 @@
   - Documentation: `docs/sla-and-lifecycle-design.md`, `docs/ai-log-B.md`.
 - **Outcome:** Full test suite passed (685 tests, 0 failures, 0 errors).
 
-## Session 6: Phase 2 Step 7 — Frontend API Integration & Authentication (2026-11-14)
-- **Task:** Implemented Phase 2 Step 7 ("Connect frontend to real APIs") and completed Step 2 ("Login/Register screens + real auth").
+## Session 6: Phase 2 Step 5 & 7 — Frontend API Integration & Notifications (2026-11-14)
+- **Task:** Implemented Phase 2 Step 7 ("Connect frontend to real APIs"), Step 2 ("Login/Register screens + real auth"), and Step 5 ("Notification UI").
 - **Files Created/Updated:**
+  - `frontend/src/components/NotificationBell.jsx`: In-app notification bell with real-time unread badge, popover tray, direct incident navigation, and mark-as-read controls.
   - `frontend/src/pages/LoginPage.jsx`: Dedicated login and employee self-registration screen.
   - `frontend/src/context/AuthContext.jsx`: Integrated stateless JWT bearer token decoding, token storage, and session lifecycle.
-  - `frontend/src/api/apiClient.js`: Switched default mode to live backend API (`VITE_USE_MOCKS=false`), added token store and automatic bearer authorization, network error handling, and real reference data endpoints.
+  - `frontend/src/api/apiClient.js`: Switched default mode to live backend API (`VITE_USE_MOCKS=false`), added token store and automatic bearer authorization, network error handling, real reference data endpoints, and `notificationApi` client.
   - `frontend/src/App.jsx`: Route guarding for unauthenticated users and admin-only routes.
-  - `frontend/src/components/Navbar.jsx`: Dynamic user badge and sign-out controls.
-  - `frontend/src/test/realApi.test.js`: 10 integration unit tests for real API mode.
+  - `frontend/src/components/Navbar.jsx`: Embedded NotificationBell, dynamic user badge, and sign-out controls.
+  - `frontend/src/test/realApi.test.js`: 11 integration unit tests covering real API mode and notification endpoints.
   - Code cleanups across frontend components for zero-warning ESLint compliance.
-- **Outcome:** Frontend lint passed (0 warnings), build passed, all 16 frontend unit tests passed. Backend suite remains at 685 passing tests.
+- **Outcome:** Frontend lint passed (0 warnings), build passed, all 17 frontend unit tests passed. Backend suite remains at 685 passing tests.
+
 
 
