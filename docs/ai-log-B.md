@@ -97,6 +97,20 @@
     - `SlaMonitorConfigTest`: Spring bean wiring test.
 - **Outcome:** Total backend test suite: 721 tests passing (0 failures, 0 errors). Frontend test suite: 17/17 tests passing, build passing, 0 ESLint warnings. Idempotent SLA monitoring verified and ready for Gate B4 scheduler & REST API.
 
+## Session 10: Gate B4 — SLA API & Scheduler (2026-11-15)
+- **Task:** Implemented Gate B4 (Background scheduler with configurable interval and property condition, admin manual-run endpoint `POST /api/sla/monitor/run`, violation endpoint `GET /api/sla/violations`, and warning/at-risk endpoint `GET /api/sla/at-risk`).
+- **Files Created:**
+  - `com.iitsm.api.dto.SlaAlertResponse`: Response DTO for SLA alert presentation.
+  - `com.iitsm.api.dto.SlaMonitorRunResponse`: Response DTO for manual monitor execution stats.
+  - `com.iitsm.infrastructure.scheduler.SlaScheduler`: Background scheduled monitor component guarded by `@ConditionalOnProperty(name = "iitsm.sla.monitor.enabled", havingValue = "true")` with configurable fixed delay (`${iitsm.sla.monitor.interval-ms:30000}`).
+  - `com.iitsm.config.SlaSchedulerConfig`: Configuration enabling `@EnableScheduling` conditionally when property is true, keeping test baseline unburdened by active schedulers.
+  - `com.iitsm.api.SlaApiController`: REST controller exposing `POST /api/sla/monitor/run` (admin only), `GET /api/sla/violations`, and `GET /api/sla/at-risk` with optional incident filter.
+  - Unit & Integration Tests:
+    - `SlaApiControllerTest`: 5 tests verifying admin manual trigger, employee 403, technician 403, violation queries with incident filtering, and at-risk queries with incident filtering.
+    - `SlaSchedulerTest`: 2 tests verifying scheduler invocation and exception isolation without rethrowing.
+- **Outcome:** Total backend test suite: 728 tests passing (0 failures, 0 errors). Frontend remains green (17/17 tests passing, build passing, 0 ESLint warnings). B4 complete and unblocked.
+
+
 
 
 
