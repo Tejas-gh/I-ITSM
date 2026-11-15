@@ -34,12 +34,15 @@ export default function IncidentDetailPage() {
 
   const loadIncident = async () => {
     try {
-      const [data, techList] = await Promise.all([
-        incidentApi.getIncident(id),
-        referenceApi.listTechnicians(),
-      ]);
+      const data = await incidentApi.getIncident(id);
       setIncident(data);
-      setTechnicians(techList);
+
+      if (ROLE_GROUPS.ADMINISTRATOR.includes(currentUser.role)) {
+        const techList = await referenceApi.listTechnicians();
+        setTechnicians(techList);
+      } else {
+        setTechnicians([]);
+      }
     } catch (err) {
       setError(err.message || 'Failed to load incident details');
     }
@@ -51,10 +54,13 @@ export default function IncidentDetailPage() {
       try {
         setLoading(true);
         setError(null);
-        const [data, techList] = await Promise.all([
-          incidentApi.getIncident(id),
-          referenceApi.listTechnicians(),
-        ]);
+        const data = await incidentApi.getIncident(id);
+        let techList = [];
+
+        if (ROLE_GROUPS.ADMINISTRATOR.includes(currentUser.role)) {
+          techList = await referenceApi.listTechnicians();
+        }
+
         if (!ignore) {
           setIncident(data);
           setTechnicians(techList);

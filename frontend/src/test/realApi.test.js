@@ -91,11 +91,14 @@ describe('API client in real-backend mode', () => {
     await expect(api.incidentApi.suggestCategory('Printer jam', 'Paper stuck')).resolves.toBeNull();
   });
 
-  it('administrator-only reference lists return an empty list on 403', async () => {
+  it('administrator-only reference lists preserve 403 errors', async () => {
     const api = await loadRealClient();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ code: 'UNAUTHORIZED_OPERATION', message: 'admin only' }, 403)));
 
-    await expect(api.referenceApi.listTechnicians()).resolves.toEqual([]);
+    await expect(api.referenceApi.listTechnicians()).rejects.toMatchObject({
+      status: 403,
+      code: 'UNAUTHORIZED_OPERATION',
+    });
   });
 
   it('reference data comes from the backend, not the mock store', async () => {

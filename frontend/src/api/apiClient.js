@@ -612,18 +612,6 @@ export const incidentApi = {
   },
 };
 
-/**
- * Reference data API.
- * Admin-only lists (users, technicians) answer 403 for other roles; those callers get an empty list.
- */
-async function listOrEmptyWhenForbidden(path) {
-  try {
-    return await http(path);
-  } catch (err) {
-    if (err.status === 403) return [];
-    throw err;
-  }
-}
 
 export const referenceApi = {
   async listServices() {
@@ -640,11 +628,11 @@ export const referenceApi = {
     return INITIAL_CATEGORIES.filter((c) => c.active !== false);
   },
   async listUsers() {
-    if (!USE_MOCK) return listOrEmptyWhenForbidden('/admin/users');
+    if (!USE_MOCK) return http('/admin/users');
     return [...INITIAL_USERS];
   },
   async listTechnicians() {
-    if (!USE_MOCK) return listOrEmptyWhenForbidden('/admin/technicians');
+    if (!USE_MOCK) return http('/admin/technicians');
     return INITIAL_USERS.filter((u) => u.role === 'TECHNICIAN' || u.role === 'TEAM_LEAD');
   },
 };
