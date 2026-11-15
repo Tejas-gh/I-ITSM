@@ -17,8 +17,8 @@ import com.iitsm.infrastructure.persistence.memory.InMemorySlaAlertRepository;
 /**
  * Spring configuration wiring the SLA monitor service and incident processor.
  *
- * <p>Provides an in-memory {@link SlaAlertRepository} fallback until Developer A registers the
- * JPA repository in Gate A3.</p>
+ * <p>Provides an in-memory {@link SlaAlertRepository} fallback; the primary {@code JpaSlaAlertRepository}
+ * (A3) supersedes it at runtime.</p>
  */
 @Configuration
 public class SlaMonitorConfig {
