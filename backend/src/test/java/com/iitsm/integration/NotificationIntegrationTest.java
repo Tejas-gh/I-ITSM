@@ -150,7 +150,7 @@ public class NotificationIntegrationTest {
         incidentService.verifyResolution(EMP_ID, incId);
         incidentService.closeIncident(new com.iitsm.application.command.CloseIncidentCommand(ADMIN_ID, incId, "Closing confirmed"));
 
-        // Verify reporter received closure notification (INCIDENT_CLOSED notifies all users)
+        // Verify reporter received closure notification (CLOSED notifies assignee + admins + reporter)
         List<Notification> empNotifications = notificationQueryService.getNotificationsForUser(EMP_ID);
         assertFalse(empNotifications.isEmpty(), "Reporter should have received closure notification");
         assertTrue(empNotifications.stream().anyMatch(n -> n.incidentId().equals(incId)));

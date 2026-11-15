@@ -11,6 +11,7 @@ import com.iitsm.domain.event.DomainEventPublisher;
 import com.iitsm.domain.notification.NotificationChannel;
 import com.iitsm.domain.notification.NotificationFactory;
 import com.iitsm.domain.notification.NotificationRepository;
+import com.iitsm.domain.repository.IncidentRepository;
 import com.iitsm.domain.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.context.annotation.Bean;
@@ -32,12 +33,13 @@ public class AuditNotificationConfig {
     public AuditNotificationConfig(DomainEventPublisher publisher,
                                    AuditRepository auditRepository,
                                    NotificationRepository notificationRepository,
-                                   UserRepository userRepository) {
+                                   UserRepository userRepository,
+                                   IncidentRepository incidentRepository) {
         this.publisher = publisher;
         this.auditListener = new AuditEventListener(auditRepository);
 
         NotificationFactory factory = new NotificationFactory();
-        NotificationRecipientResolver resolver = new NotificationRecipientResolver(userRepository);
+        NotificationRecipientResolver resolver = new NotificationRecipientResolver(userRepository, incidentRepository);
         List<NotificationChannel> channels = List.of(
                 new InAppNotificationChannel(notificationRepository),
                 new SimulatedEmailNotificationChannel()

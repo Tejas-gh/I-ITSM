@@ -1,7 +1,12 @@
 package com.iitsm.application.notification;
 
 import com.iitsm.domain.event.*;
+import com.iitsm.domain.incident.Incident;
+import com.iitsm.domain.factory.IncidentFactory;
 import com.iitsm.domain.model.*;
+import com.iitsm.domain.priority.WeightedPriorityStrategy;
+import com.iitsm.infrastructure.persistence.memory.InMemoryIncidentIdGenerator;
+import com.iitsm.infrastructure.persistence.memory.InMemoryIncidentRepository;
 import com.iitsm.domain.repository.UserRepository;
 import com.iitsm.infrastructure.persistence.memory.InMemoryUserRepository;
 import com.iitsm.support.TestData;
@@ -117,31 +122,133 @@ class NotificationRecipientResolverTest {
         assertFalse(recipients.contains("emp-1"), "employee should not receive SLA warnings");
     }
 
+    // ---- A1: lifecycle recipients = assignee + admins + reporter ----
+
+    private static final String INC = "INC1001";
+
+    private Incident incidentFor(InMemoryIncidentRepository repo, Employee reporter, Technician assignee) {
+        Incident i = new IncidentFactory(new InMemoryIncidentIdGenerator(), new WeightedPriorityStrategy())
+                .create(TestData.draft(reporter, TestData.service("srv-1", BusinessCriticality.HIGH),
+                        TestData.category("NETWORK"), Impact.HIGH, Urgency.HIGH, 1), NOW);
+        i.classify();
+        if (assignee != null) {
+            i.assign(assignee, NOW);
+        }
+        repo.save(i);
+        return i;
+    }
+
+    private void saveAllUsers() {
+        Employee other = TestData.employee("emp-other");
+        for (User u : List.of(admin1, admin2, tech1, tech2, employee1, other)) {
+            userRepository.save(u);
+        }
+    }
+
+    private List<String> resolve(DomainEvent event, Technician assignee) {
+        InMemoryIncidentRepository repo = new InMemoryIncidentRepository();
+        incidentFor(repo, employee1, assignee);
+        return new NotificationRecipientResolver(userRepository, repo).resolveRecipientIds(event);
+    }
+
     @Test
-    @DisplayName("INCIDENT_CLOSED: all active users receive, actor excluded")
-    void incidentClosed_allActiveUsersReceive_actorExcluded() {
-        Employee inactiveEmp = TestData.employee("emp-inactive");
-        inactiveEmp.deactivate();
+    @DisplayName("ASSIGNED: assignee + admins + reporter; unrelated users excluded")
+    void assigned_assigneeAdminsReporter() {
+        saveAllUsers();
+        DomainEvent e = new IncidentAssigned(NOW, "admin-1", INC, IncidentStatus.CLASSIFIED,
+                IncidentStatus.ASSIGNED, "Assigned", "tech-1", false);
+        List<String> r = resolve(e, tech1);
+        assertEquals(java.util.Set.of("tech-1", "admin-2", "emp-1"), new java.util.HashSet<>(r));
+        assertEquals(r.size(), new java.util.HashSet<>(r).size(), "no duplicates");
+    }
 
-        userRepository.save(admin1);
-        userRepository.save(admin2);
-        userRepository.save(tech1);
-        userRepository.save(employee1);
-        userRepository.save(inactiveEmp);
+    @Test
+    @DisplayName("ACKNOWLEDGED: assignee is actor (excluded); admins + reporter notified")
+    void acknowledged_adminsAndReporter() {
+        saveAllUsers();
+        DomainEvent e = new IncidentAcknowledged(NOW, "tech-1", INC, IncidentStatus.ASSIGNED,
+                IncidentStatus.ACKNOWLEDGED, "Ack", "tech-1");
+        assertEquals(java.util.Set.of("admin-1", "admin-2", "emp-1"), new java.util.HashSet<>(resolve(e, tech1)));
+    }
 
-        DomainEvent event = new IncidentClosed(
-                NOW, "admin-1", "INC-001",
-                IncidentStatus.VERIFIED, IncidentStatus.CLOSED,
-                "Incident closed", "admin-1"
-        );
+    @Test
+    @DisplayName("INFO_REQUESTED: assignee (from incident) + admins + reporter")
+    void infoRequested_assigneeAdminsReporter() {
+        saveAllUsers();
+        DomainEvent e = new IncidentStatusChanged(NOW, "tech-1", INC, IncidentStatus.IN_PROGRESS,
+                IncidentStatus.WAITING_FOR_USER, "Info requested", "INFO_REQUESTED");
+        assertEquals(java.util.Set.of("admin-1", "admin-2", "emp-1"), new java.util.HashSet<>(resolve(e, tech1)));
+        DomainEvent byAdmin = new IncidentStatusChanged(NOW, "admin-1", INC, IncidentStatus.IN_PROGRESS,
+                IncidentStatus.WAITING_FOR_USER, "Info requested", "INFO_REQUESTED");
+        assertTrue(resolve(byAdmin, tech1).contains("tech-1"), "assignee resolved from incident");
+    }
 
-        List<String> recipients = resolver.resolveRecipientIds(event);
+    @Test
+    @DisplayName("RESOLVED: assignee excluded as actor; admins + reporter notified")
+    void resolved_adminsAndReporter() {
+        saveAllUsers();
+        DomainEvent e = new IncidentResolved(NOW, "tech-1", INC, IncidentStatus.IN_PROGRESS,
+                IncidentStatus.RESOLVED, "Resolved", "tech-1");
+        assertEquals(java.util.Set.of("admin-1", "admin-2", "emp-1"), new java.util.HashSet<>(resolve(e, tech1)));
+    }
 
-        assertFalse(recipients.contains("admin-1"), "actor should be excluded");
-        assertTrue(recipients.contains("admin-2"));
-        assertTrue(recipients.contains("tech-1"));
-        assertTrue(recipients.contains("emp-1"));
-        assertFalse(recipients.contains("emp-inactive"), "inactive user should be excluded");
+    @Test
+    @DisplayName("CLOSED: only assignee + admins + reporter — no broadcast to unrelated users")
+    void closed_noBroadcast() {
+        Employee inactiveReporterLike = TestData.employee("emp-inactive");
+        inactiveReporterLike.deactivate();
+        saveAllUsers();
+        userRepository.save(inactiveReporterLike);
+        DomainEvent e = new IncidentClosed(NOW, "admin-1", INC, IncidentStatus.VERIFIED,
+                IncidentStatus.CLOSED, "Closed", "admin-1");
+        List<String> r = resolve(e, tech1);
+        assertEquals(java.util.Set.of("tech-1", "admin-2", "emp-1"), new java.util.HashSet<>(r));
+        assertFalse(r.contains("tech-2"));
+        assertFalse(r.contains("emp-other"));
+        assertFalse(r.contains("emp-inactive"));
+    }
+
+    @Test
+    @DisplayName("Inactive reporter/assignee are skipped; unassigned incident has no assignee recipient")
+    void inactiveAndUnassigned() {
+        saveAllUsers();
+        employee1.deactivate();
+        DomainEvent e = new IncidentClosed(NOW, "admin-1", INC, IncidentStatus.VERIFIED,
+                IncidentStatus.CLOSED, "Closed", "admin-1");
+        assertEquals(List.of("admin-2"), resolve(e, null));
+    }
+
+    @Test
+    @DisplayName("User who is both reporter-side and admin-side is notified once")
+    void overlappingGroups_deliveredOnce() {
+        saveAllUsers();
+        // admin-2 is also the technician id carried by the event -> appears in two groups
+        DomainEvent e = new IncidentAssigned(NOW, "admin-1", INC, IncidentStatus.CLASSIFIED,
+                IncidentStatus.ASSIGNED, "Assigned", "admin-2", false);
+        List<String> r = resolve(e, null);
+        assertEquals(1, r.stream().filter("admin-2"::equals).count());
+    }
+
+    @Test
+    @DisplayName("Missing incident: falls back to event assignee + admins without failing")
+    void missingIncident_fallback() {
+        saveAllUsers();
+        DomainEvent e = new IncidentClosed(NOW, "admin-1", "INC-UNKNOWN", IncidentStatus.VERIFIED,
+                IncidentStatus.CLOSED, "Closed", "admin-1");
+        List<String> r = new NotificationRecipientResolver(userRepository, new InMemoryIncidentRepository())
+                .resolveRecipientIds(e);
+        assertEquals(List.of("admin-2"), r);
+    }
+
+    @Test
+    @DisplayName("SLA_VIOLATED: admins + technicians (unchanged), employees excluded")
+    void slaViolated_unchanged() {
+        saveAllUsers();
+        DomainEvent e = new SlaViolated(NOW, DomainEvent.SYSTEM_ACTOR, INC, IncidentStatus.IN_PROGRESS,
+                IncidentStatus.IN_PROGRESS, "Violated", com.iitsm.domain.sla.SlaType.RESOLUTION, NOW);
+        List<String> r = resolve(e, tech1);
+        assertTrue(r.containsAll(List.of("admin-1", "admin-2", "tech-1", "tech-2")));
+        assertFalse(r.contains("emp-1"));
     }
 
     @Test

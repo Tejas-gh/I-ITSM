@@ -1,28 +1,42 @@
 package com.iitsm.application.notification;
 
 import com.iitsm.domain.event.DomainEvent;
+import com.iitsm.domain.event.IncidentAcknowledged;
 import com.iitsm.domain.event.IncidentAssigned;
 import com.iitsm.domain.exception.InvalidInputException;
 import com.iitsm.domain.model.Role;
+import com.iitsm.domain.incident.Incident;
 import com.iitsm.domain.model.User;
+import com.iitsm.domain.repository.IncidentRepository;
 import com.iitsm.domain.repository.UserRepository;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Resolves which user IDs should receive a notification for a given domain event (D2 matrix).
+ * ASSIGNED/ACKNOWLEDGED/INFO_REQUESTED/RESOLVED/CLOSED go to assignee + admins + reporter, de-duplicated.
  * Always excludes the actor themselves and inactive users.
  */
 public final class NotificationRecipientResolver {
 
     private final UserRepository userRepository;
+    private final IncidentRepository incidentRepository; // nullable: legacy constructor
 
+    /** Legacy constructor: incident-aware rules fall back to the event data and admins only. */
     public NotificationRecipientResolver(UserRepository userRepository) {
+        this(userRepository, null);
+    }
+
+    public NotificationRecipientResolver(UserRepository userRepository, IncidentRepository incidentRepository) {
         if (userRepository == null) {
             throw new InvalidInputException("userRepository must not be null");
         }
         this.userRepository = userRepository;
+        this.incidentRepository = incidentRepository;
     }
 
     /**
@@ -40,8 +54,6 @@ public final class NotificationRecipientResolver {
         return switch (action) {
             case "INCIDENT_CREATED",
                  "INCIDENT_CLASSIFIED",
-                 "INCIDENT_ACKNOWLEDGED",
-                 "INCIDENT_RESOLVED",
                  "PRIORITY_CHANGED",
                  "ASSIGNMENT_FAILED",
                  // IncidentUpdated / IncidentStatusChanged actions
@@ -50,7 +62,6 @@ public final class NotificationRecipientResolver {
                  "FEEDBACK_SUBMITTED",
                  "INCIDENT_UPDATED",
                  "WORK_STARTED",
-                 "INFO_REQUESTED",
                  "INFO_RECEIVED",
                  "RESOLUTION_REJECTED",
                  "VERIFIED",
@@ -59,41 +70,52 @@ public final class NotificationRecipientResolver {
                     allUsers, actorId,
                     u -> isAdmin(u)
             );
-            case "INCIDENT_ASSIGNED" -> {
-                // Notify assigned technician + all admins
-                List<String> recipients = new ArrayList<>();
-                // Cast safely after action check
-                if (event instanceof IncidentAssigned assigned) {
-                    String technicianId = assigned.technicianId();
-                    // Add technician if active and not actor
-                    for (User u : allUsers) {
-                        if (u.getId().equals(technicianId)
-                                && u.isActive()
-                                && !u.getId().equals(actorId)) {
-                            recipients.add(u.getId());
-                            break;
-                        }
-                    }
-                }
-                // Add admins
-                for (User u : allUsers) {
-                    if (isAdmin(u) && u.isActive() && !u.getId().equals(actorId)
-                            && !recipients.contains(u.getId())) {
-                        recipients.add(u.getId());
-                    }
-                }
-                yield recipients;
-            }
-            case "INCIDENT_CLOSED" -> filterAndCollect(
-                    allUsers, actorId,
-                    u -> true  // all active users
-            );
+            // Lifecycle events: assignee + admins + reporter (no broadcast to unrelated users)
+            case "INCIDENT_ASSIGNED",
+                 "INCIDENT_ACKNOWLEDGED",
+                 "INFO_REQUESTED",
+                 "INCIDENT_RESOLVED",
+                 "INCIDENT_CLOSED" -> resolveLifecycleRecipients(event, allUsers);
             case "SLA_WARNING", "SLA_VIOLATED" -> filterAndCollect(
                     allUsers, actorId,
                     u -> isAdmin(u) || isTechnician(u)
             );
             default -> List.of();
         };
+    }
+
+    private List<String> resolveLifecycleRecipients(DomainEvent event, List<User> allUsers) {
+        Optional<Incident> incident = incidentRepository == null
+                ? Optional.empty()
+                : incidentRepository.findById(event.incidentId());
+
+        Set<String> candidateIds = new LinkedHashSet<>(); // de-duplicates overlapping groups
+        // Assignee: event data is authoritative for assignment/acknowledgement, else the incident
+        String eventTechnician = null;
+        if (event instanceof IncidentAssigned assigned) {
+            eventTechnician = assigned.technicianId();
+        } else if (event instanceof IncidentAcknowledged ack) {
+            eventTechnician = ack.technicianId();
+        }
+        if (eventTechnician != null) {
+            candidateIds.add(eventTechnician);
+        } else {
+            incident.flatMap(Incident::getAssignedTechnician).ifPresent(t -> candidateIds.add(t.getId()));
+        }
+        incident.ifPresent(i -> candidateIds.add(i.getReporter().getId()));
+        for (User u : allUsers) {
+            if (isAdmin(u)) {
+                candidateIds.add(u.getId());
+            }
+        }
+
+        List<String> result = new ArrayList<>();
+        for (User u : allUsers) { // keep only existing, active users; exclude the actor
+            if (candidateIds.contains(u.getId()) && u.isActive() && !u.getId().equals(event.actorId())) {
+                result.add(u.getId());
+            }
+        }
+        return result;
     }
 
     private List<String> filterAndCollect(List<User> allUsers, String actorId,
