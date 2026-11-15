@@ -196,28 +196,65 @@ export const authApi = {
   },
 };
 
+// ---- Incident search (A4) ----------------------------------------------------------------------------------------
+const SEARCH_PARAMS = ['incidentId', 'createdFrom', 'createdTo', 'status', 'priority', 'categoryId', 'serviceId', 'technicianId', 'slaStatus'];
+
+/** Converts a yyyy-mm-dd date input to the ISO instant the backend expects (UTC start / end of that day). */
+export function dateToInstant(date, endOfDay = false) {
+  if (!date) return '';
+  return endOfDay ? `${date}T23:59:59.999Z` : `${date}T00:00:00Z`;
+}
+
+/** Builds "?a=b&c=d" from the non-blank criteria only; returns '' when nothing is set. */
+export function buildSearchQuery(criteria = {}) {
+  const params = new URLSearchParams();
+  SEARCH_PARAMS.forEach((key) => {
+    const value = criteria[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      params.set(key, String(value).trim());
+    }
+  });
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+// Mock mode only: mirrors the backend criteria on the local store (SLA status is not evaluated in mock mode).
+function applyMockSearch(list, c) {
+  return list.filter((inc) => {
+    if (c.incidentId && inc.id !== c.incidentId.trim()) return false;
+    if (c.createdFrom && new Date(inc.createdAt) < new Date(c.createdFrom)) return false;
+    if (c.createdTo && new Date(inc.createdAt) > new Date(c.createdTo)) return false;
+    if (c.status && inc.status !== c.status) return false;
+    if (c.priority && inc.priority !== c.priority) return false;
+    if (c.categoryId && inc.categoryId !== c.categoryId) return false;
+    if (c.serviceId && inc.serviceId !== c.serviceId) return false;
+    if (c.technicianId && inc.assignedTechnicianId !== c.technicianId.trim()) return false;
+    return true;
+  });
+}
+
 /**
  * Incident API client
  */
 export const incidentApi = {
-  // GET /api/incidents
-  async listVisibleIncidents(actor) {
+  // GET /api/incidents[?incidentId&createdFrom&createdTo&status&priority&categoryId&serviceId&technicianId&slaStatus]
+  // Real mode: every criterion is evaluated by the backend (server-side search). Mock mode filters the local store.
+  async listVisibleIncidents(actor, criteria = {}) {
     if (!USE_MOCK) {
-      return http('/incidents');
+      return http(`/incidents${buildSearchQuery(criteria)}`);
     }
 
     mockIncidents = getStoredIncidents();
-    if (!actor) return mockIncidents;
-
-    // Role-based visibility (§Q.2)
-    if (actor.role === 'EMPLOYEE') {
-      return mockIncidents.filter((inc) => inc.reporterId === actor.id);
+    let visible = [...mockIncidents];
+    if (actor) {
+      // Role-based visibility (§Q.2)
+      if (actor.role === 'EMPLOYEE') {
+        visible = visible.filter((inc) => inc.reporterId === actor.id);
+      } else if (actor.role === 'TECHNICIAN' || actor.role === 'TEAM_LEAD') {
+        visible = visible.filter((inc) => inc.assignedTechnicianId === actor.id);
+      }
     }
-    if (actor.role === 'TECHNICIAN' || actor.role === 'TEAM_LEAD') {
-      return mockIncidents.filter((inc) => inc.assignedTechnicianId === actor.id);
-    }
-    // Administrator & IT Manager view all
-    return [...mockIncidents];
+    return applyMockSearch(visible, criteria);
   },
 
   // GET /api/incidents/{id}
@@ -663,3 +700,15 @@ export const notificationApi = {
   },
 };
 
+/**
+ * Audit API client (A4). The backend restricts audit endpoints to administrators (403 otherwise).
+ */
+export const auditApi = {
+  // GET /api/audit/incidents/{incidentId}: audit entries (timestamp, actor, action, states, description)
+  async listForIncident(incidentId) {
+    if (!USE_MOCK) {
+      return http(`/audit/incidents/${encodeURIComponent(incidentId)}`);
+    }
+    return [];
+  },
+};

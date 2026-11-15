@@ -5,7 +5,35 @@ import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import SlaBadge from '../components/SlaBadge';
-import { INCIDENT_STATUS, PRIORITY_LEVEL } from '../constants/itsmConstants';
+import { dateToInstant } from '../api/apiClient';
+import { INCIDENT_STATUS, PRIORITY_LEVEL, SLA_STATUS } from '../constants/itsmConstants';
+
+const EMPTY_FORM = {
+  incidentId: '',
+  dateFrom: '',
+  dateTo: '',
+  status: '',
+  priority: '',
+  categoryId: '',
+  serviceId: '',
+  technicianId: '',
+  slaStatus: '',
+};
+
+/** Form values -> backend query parameters (dates become ISO instants). */
+function toCriteria(form) {
+  return {
+    incidentId: form.incidentId,
+    createdFrom: dateToInstant(form.dateFrom),
+    createdTo: dateToInstant(form.dateTo, true),
+    status: form.status,
+    priority: form.priority,
+    categoryId: form.categoryId,
+    serviceId: form.serviceId,
+    technicianId: form.technicianId,
+    slaStatus: form.slaStatus,
+  };
+}
 
 export default function IncidentListPage() {
   const { currentUser } = useAuth();
@@ -13,50 +41,61 @@ export default function IncidentListPage() {
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // Filter states
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [serviceFilter, setServiceFilter] = useState('');
+  // Search form (edited) and the criteria last submitted to the backend (applied)
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [applied, setApplied] = useState(EMPTY_FORM);
 
+  const setField = (name) => (e) => setForm((f) => ({ ...f, [name]: e.target.value }));
+
+  // Reference data for the dropdowns
   useEffect(() => {
-    async function fetchData() {
+    async function fetchReference() {
       try {
-        setLoading(true);
-        const [incList, srvList, catList] = await Promise.all([
-          incidentApi.listVisibleIncidents(currentUser),
-          referenceApi.listServices(),
-          referenceApi.listCategories(),
-        ]);
-        setIncidents(incList);
+        const [srvList, catList] = await Promise.all([referenceApi.listServices(), referenceApi.listCategories()]);
         setServices(srvList);
         setCategories(catList);
       } catch (err) {
-        console.error('Failed to load incident list', err);
-      } finally {
-        setLoading(false);
+        console.error('Failed to load reference data', err);
       }
     }
-    fetchData();
-  }, [currentUser]);
+    fetchReference();
+  }, []);
 
-  // Apply filters
-  const filteredIncidents = incidents.filter((inc) => {
-    if (statusFilter && inc.status !== statusFilter) return false;
-    if (priorityFilter && inc.priority !== priorityFilter) return false;
-    if (categoryFilter && inc.categoryId !== categoryFilter) return false;
-    if (serviceFilter && inc.serviceId !== serviceFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const matchTitle = inc.title?.toLowerCase().includes(q);
-      const matchDesc = inc.description?.toLowerCase().includes(q);
-      const matchId = inc.id?.toLowerCase().includes(q);
-      if (!matchTitle && !matchDesc && !matchId) return false;
+  // Server-side search: every submitted criterion is sent to GET /api/incidents; results are not filtered locally.
+  useEffect(() => {
+    let cancelled = false;
+    async function search() {
+      setLoading(true);
+      setError('');
+      try {
+        const list = await incidentApi.listVisibleIncidents(currentUser, toCriteria(applied));
+        if (!cancelled) setIncidents(list);
+      } catch (err) {
+        if (!cancelled) {
+          setIncidents([]);
+          setError(err.message || 'Search failed');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-    return true;
-  });
+    search();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, applied]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setApplied({ ...form });
+  };
+
+  const handleReset = () => {
+    setForm(EMPTY_FORM);
+    setApplied({ ...EMPTY_FORM });
+  };
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
@@ -86,78 +125,94 @@ export default function IncidentListPage() {
         </Link>
       </div>
 
-      {/* Filter Toolbar */}
-      <div
+      {/* Search form: submitted to the backend (server-side search) */}
+      <form
+        onSubmit={handleSubmit}
+        aria-label="Incident search"
         style={{
           backgroundColor: '#fff',
           borderRadius: '10px',
           padding: '16px 20px',
           border: '1px solid #e2e8f0',
           marginBottom: '20px',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-          gap: '12px',
         }}
       >
-        <div>
-          <label style={filterLabelStyle}>Search Text / ID</label>
-          <input
-            type="text"
-            placeholder="Search title, desc..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={inputStyle}
-          />
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            gap: '12px',
+          }}
+        >
+          <div>
+            <label htmlFor="f-incidentId" style={filterLabelStyle}>Incident ID</label>
+            <input id="f-incidentId" type="text" placeholder="e.g. INC1001" value={form.incidentId}
+              onChange={setField('incidentId')} style={inputStyle} />
+          </div>
+          <div>
+            <label htmlFor="f-dateFrom" style={filterLabelStyle}>Created From</label>
+            <input id="f-dateFrom" type="date" value={form.dateFrom} onChange={setField('dateFrom')} style={inputStyle} />
+          </div>
+          <div>
+            <label htmlFor="f-dateTo" style={filterLabelStyle}>Created To</label>
+            <input id="f-dateTo" type="date" value={form.dateTo} onChange={setField('dateTo')} style={inputStyle} />
+          </div>
+          <div>
+            <label htmlFor="f-status" style={filterLabelStyle}>Status</label>
+            <select id="f-status" value={form.status} onChange={setField('status')} style={inputStyle}>
+              <option value="">All Statuses</option>
+              {Object.values(INCIDENT_STATUS).map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="f-priority" style={filterLabelStyle}>Priority</label>
+            <select id="f-priority" value={form.priority} onChange={setField('priority')} style={inputStyle}>
+              <option value="">All Priorities</option>
+              {Object.values(PRIORITY_LEVEL).map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="f-category" style={filterLabelStyle}>Category</label>
+            <select id="f-category" value={form.categoryId} onChange={setField('categoryId')} style={inputStyle}>
+              <option value="">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="f-service" style={filterLabelStyle}>Service</label>
+            <select id="f-service" value={form.serviceId} onChange={setField('serviceId')} style={inputStyle}>
+              <option value="">All Services</option>
+              {services.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="f-technician" style={filterLabelStyle}>Technician</label>
+            <input id="f-technician" type="text" placeholder="Technician ID" value={form.technicianId}
+              onChange={setField('technicianId')} style={inputStyle} />
+          </div>
+          <div>
+            <label htmlFor="f-sla" style={filterLabelStyle}>SLA Status</label>
+            <select id="f-sla" value={form.slaStatus} onChange={setField('slaStatus')} style={inputStyle}>
+              <option value="">Any SLA Status</option>
+              {Object.values(SLA_STATUS).map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
         </div>
-
-        <div>
-          <label style={filterLabelStyle}>Status</label>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={inputStyle}>
-            <option value="">All Statuses</option>
-            {Object.values(INCIDENT_STATUS).map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+          <button type="submit" style={searchBtnStyle}>Search</button>
+          <button type="button" onClick={handleReset} style={resetBtnStyle}>Reset</button>
         </div>
-
-        <div>
-          <label style={filterLabelStyle}>Priority</label>
-          <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} style={inputStyle}>
-            <option value="">All Priorities</option>
-            {Object.values(PRIORITY_LEVEL).map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label style={filterLabelStyle}>Category</label>
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={inputStyle}>
-            <option value="">All Categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label style={filterLabelStyle}>Service</label>
-          <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} style={inputStyle}>
-            <option value="">All Services</option>
-            {services.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      </form>
 
       {/* Incident Table */}
       <div
@@ -171,11 +226,13 @@ export default function IncidentListPage() {
       >
         {loading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>Loading incidents...</div>
-        ) : filteredIncidents.length === 0 ? (
+        ) : error ? (
+          <div role="alert" style={{ padding: '40px', textAlign: 'center', color: '#b91c1c' }}>{error}</div>
+        ) : incidents.length === 0 ? (
           <div style={{ padding: '60px', textAlign: 'center', color: '#64748b' }}>
             <div style={{ fontSize: '28px', marginBottom: '8px' }}>🔍</div>
             <div style={{ fontWeight: '600', color: '#0f172a' }}>No incidents matched the selected criteria</div>
-            <p style={{ fontSize: '13px', marginTop: '4px' }}>Try resetting your filter parameters or report a new incident.</p>
+            <p style={{ fontSize: '13px', marginTop: '4px' }}>Try resetting your search criteria or report a new incident.</p>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -192,7 +249,7 @@ export default function IncidentListPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredIncidents.map((inc) => (
+                {incidents.map((inc) => (
                   <tr
                     key={inc.id}
                     style={{
@@ -270,4 +327,26 @@ const inputStyle = {
   boxSizing: 'border-box',
   backgroundColor: '#ffffff',
   outline: 'none',
+};
+
+const searchBtnStyle = {
+  padding: '8px 18px',
+  borderRadius: '6px',
+  border: 'none',
+  backgroundColor: '#2563eb',
+  color: '#fff',
+  fontSize: '13px',
+  fontWeight: '600',
+  cursor: 'pointer',
+};
+
+const resetBtnStyle = {
+  padding: '8px 18px',
+  borderRadius: '6px',
+  border: '1px solid #cbd5e1',
+  backgroundColor: '#fff',
+  color: '#334155',
+  fontSize: '13px',
+  fontWeight: '600',
+  cursor: 'pointer',
 };

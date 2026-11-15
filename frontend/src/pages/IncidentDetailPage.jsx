@@ -7,6 +7,7 @@ import PriorityBadge from '../components/PriorityBadge';
 import SlaBadge from '../components/SlaBadge';
 import LifecycleStepper from '../components/LifecycleStepper';
 import ActionModal from '../components/ActionModal';
+import AuditTimeline from '../components/AuditTimeline';
 import {
   INCIDENT_STATUS,
   ROLE_GROUPS,
@@ -631,6 +632,11 @@ export default function IncidentDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Audit history (administrators only: the audit API is admin-restricted) */}
+      {isAdmin && (
+        <AuditTimeline incidentId={incident.id} refreshKey={`${incident.status}-${incident.notes?.length ?? 0}`} />
+      )}
 
       {/* Modal Dialog */}
       <ActionModal
