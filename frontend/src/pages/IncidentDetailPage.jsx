@@ -570,7 +570,7 @@ export default function IncidentDetailPage() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
               <span style={{ fontWeight: '700', color: '#334155', fontSize: '14px' }}>
-                🔒 Closed by {incident.closedById}
+                🔒 Closed by Administrator
               </span>
               <span style={{ fontSize: '12px', color: '#64748b' }}>
                 {new Date(incident.closedAt).toLocaleString()}
