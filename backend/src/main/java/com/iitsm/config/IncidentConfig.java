@@ -14,7 +14,7 @@ import com.iitsm.domain.assignment.LoadBasedAssignmentStrategy;
 import com.iitsm.domain.assignment.SkillBasedAssignmentStrategy;
 import com.iitsm.domain.assignment.SwitchableAssignmentStrategy;
 import com.iitsm.domain.classification.CategoryClassifier;
-import com.iitsm.domain.classification.NoOpClassifier;
+import com.iitsm.domain.classification.KeywordClassifier;
 import com.iitsm.domain.event.DomainEventPublisher;
 import com.iitsm.domain.factory.IncidentFactory;
 import com.iitsm.domain.factory.IncidentIdGenerator;
@@ -80,7 +80,7 @@ public class IncidentConfig {
 
     @Bean
     CategoryClassifier categoryClassifier() {
-        return new NoOpClassifier();
+        return new KeywordClassifier();
     }
 
     @Bean
