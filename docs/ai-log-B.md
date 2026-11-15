@@ -84,6 +84,20 @@
     - `TechnicianRecommendationConfigTest`: Verifies Spring bean wiring.
 - **Outcome:** Total backend test suite: 712 tests passing with 0 failures and 0 errors. Frontend remains green (17/17 tests passing, build passing, 0 ESLint warnings). Auto-assignment logic (`performAutoAssign`) preserved without modification. Intelligent Feature #2 complete.
 
+## Session 9: Gate B3 — SLA Monitor Service (2026-11-15)
+- **Task:** Implemented Gate B3 (SLA Monitor service evaluating open incidents, detecting warnings at 20% threshold and violations at deadline, idempotent alert persistence, SYSTEM-authored domain events, and per-incident transaction isolation).
+- **Files Created:**
+  - `com.iitsm.application.service.IncidentSlaResult`: Result value object tracking warnings and violations per incident.
+  - `com.iitsm.application.service.SlaMonitorResult`: Summary metrics record for monitor scan runs.
+  - `com.iitsm.application.service.SlaIncidentProcessor`: Isolated incident-level SLA evaluator with `@Transactional(propagation = Propagation.REQUIRES_NEW)`.
+  - `com.iitsm.application.service.SlaMonitorService`: Core monitor scanning open incidents, skipping CLOSED incidents, evaluating SLA state via `SlaEvaluator`, idempotently saving `SlaAlert` to `SlaAlertRepository`, publishing `SlaWarning` / `SlaViolated` domain events with actor `SYSTEM`, and providing query methods (`getViolations()`, `getAtRiskAlerts()`).
+  - `com.iitsm.config.SlaMonitorConfig`: Spring configuration providing `@ConditionalOnMissingBean` fallback to `InMemorySlaAlertRepository` until Gate A3 JPA repository arrives.
+  - Unit & Integration Tests:
+    - `SlaMonitorServiceTest`: 8 comprehensive tests verifying warning generated once, violation generated once, second tick idempotency, paused resolution SLA calculation, closed incident skipping, per-incident error isolation, late-resolved violation detection, and query filters.
+    - `SlaMonitorConfigTest`: Spring bean wiring test.
+- **Outcome:** Total backend test suite: 721 tests passing (0 failures, 0 errors). Frontend test suite: 17/17 tests passing, build passing, 0 ESLint warnings. Idempotent SLA monitoring verified and ready for Gate B4 scheduler & REST API.
+
+
 
 
 
