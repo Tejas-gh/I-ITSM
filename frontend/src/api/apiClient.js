@@ -148,7 +148,7 @@ async function http(path, options = {}) {
   if (!response.ok) {
     let errorPayload = null;
     try {
-      errorPayload = await response.json();
+      errorPayload = await response.clone().json();
     } catch {
       // not JSON
     }
@@ -165,7 +165,7 @@ async function http(path, options = {}) {
 
   if (response.status === 204) return null;
   // Some endpoints answer 200 with an empty body (e.g. suggest-category with no suggestion).
-  const text = await response.text();
+  const text = await response.clone().text();
   return text ? JSON.parse(text) : null;
 }
 
@@ -808,6 +808,137 @@ export const auditApi = {
       return http(`/audit/incidents/${encodeURIComponent(incidentId)}`);
     }
     return [];
+  },
+
+  // GET /api/audit: every audit entry (administrators only)
+  async listAll() {
+    if (!USE_MOCK) {
+      return http('/audit');
+    }
+    return [];
+  },
+};
+
+// ---- Admin console (A5) -----------------------------------------------------------------------------------------
+
+/** Reads a backend Duration (ISO-8601 "PT5M" or numeric seconds) as seconds; null when unreadable. */
+export function parseDurationSeconds(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  if (/^-?\d+(\.\d+)?$/.test(value.trim())) return Number(value);
+  const m = /^PT(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?$/.exec(value.trim());
+  if (!m || (m[1] === undefined && m[2] === undefined && m[3] === undefined)) return null;
+  return Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0);
+}
+
+/** Minutes -> ISO-8601 whole-second duration sent to the backend, e.g. 30 -> "PT1800S". */
+export function toIsoDuration(minutes) {
+  return `PT${Math.round(Number(minutes) * 60)}S`;
+}
+
+/** Seconds -> short human text: "5 min", "2 h", "1 h 30 min". */
+export function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return '-';
+  if (seconds < 60) return `${seconds} s`;
+  const totalMinutes = Math.round(seconds / 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m} min`;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+
+// Mock-mode admin state (demo only; the real backend is the source of truth otherwise)
+const mockStrategy = { selected: 'skill-based', available: ['skill-based', 'load-based'] };
+const mockPolicies = [
+  { serviceId: null, priority: 'P1', responseTarget: 'PT5M', resolutionTarget: 'PT30M' },
+  { serviceId: null, priority: 'P2', responseTarget: 'PT15M', resolutionTarget: 'PT2H' },
+  { serviceId: null, priority: 'P3', responseTarget: 'PT1H', resolutionTarget: 'PT8H' },
+  { serviceId: null, priority: 'P4', responseTarget: 'PT4H', resolutionTarget: 'PT24H' },
+];
+const mockUsers = INITIAL_USERS.map((u) => ({ ...u }));
+
+/**
+ * Admin API client. Every endpoint is restricted to administrators by the backend (403 otherwise).
+ */
+export const adminApi = {
+  // GET /api/admin/assignment-strategy -> { selected, available }
+  async getAssignmentStrategy() {
+    if (!USE_MOCK) return http('/admin/assignment-strategy');
+    return { ...mockStrategy, available: [...mockStrategy.available] };
+  },
+
+  // PUT /api/admin/assignment-strategy { strategy }
+  async selectAssignmentStrategy(strategy) {
+    if (!USE_MOCK) {
+      return http('/admin/assignment-strategy', { method: 'PUT', body: JSON.stringify({ strategy }) });
+    }
+    if (!mockStrategy.available.includes(strategy)) throw new Error(`Unknown assignment strategy: ${strategy}`);
+    mockStrategy.selected = strategy;
+    return { ...mockStrategy, available: [...mockStrategy.available] };
+  },
+
+  // GET /api/admin/sla-policies -> [{ serviceId|null, priority, responseTarget, resolutionTarget }]
+  async listSlaPolicies() {
+    if (!USE_MOCK) return http('/admin/sla-policies');
+    return mockPolicies.map((p) => ({ ...p }));
+  },
+
+  // POST /api/admin/sla-policies (upsert by service + priority; serviceId null = default policy)
+  async saveSlaPolicy({ serviceId, priority, responseMinutes, resolutionMinutes }) {
+    const body = {
+      serviceId: serviceId || null,
+      priority,
+      responseTarget: toIsoDuration(responseMinutes),
+      resolutionTarget: toIsoDuration(resolutionMinutes),
+    };
+    if (!USE_MOCK) return http('/admin/sla-policies', { method: 'POST', body: JSON.stringify(body) });
+    const saved = { ...body };
+    const i = mockPolicies.findIndex((p) => p.serviceId === saved.serviceId && p.priority === saved.priority);
+    if (i >= 0) mockPolicies[i] = saved;
+    else mockPolicies.push(saved);
+    return { ...saved };
+  },
+
+  // GET /api/admin/users
+  async listUsers() {
+    if (!USE_MOCK) return http('/admin/users');
+    return mockUsers.map((u) => ({ ...u }));
+  },
+
+  // POST /api/admin/users
+  async createUser(payload) {
+    if (!USE_MOCK) return http('/admin/users', { method: 'POST', body: JSON.stringify(payload) });
+    if (mockUsers.some((u) => u.id === payload.id)) throw new Error(`User already exists: ${payload.id}`);
+    const user = { ...payload };
+    delete user.password; // never stored or returned
+    const isTech = user.role === 'TECHNICIAN' || user.role === 'TEAM_LEAD';
+    mockUsers.push({ ...user, active: true, ...(isTech ? { available: true } : {}) });
+    return { ...mockUsers[mockUsers.length - 1] };
+  },
+
+  // PUT /api/admin/users/{id} (omitted fields keep their value; the role cannot change)
+  async updateUser(id, payload) {
+    if (!USE_MOCK) return http(`/admin/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+    const i = mockUsers.findIndex((u) => u.id === id);
+    if (i < 0) throw new Error(`User not found: ${id}`);
+    Object.entries(payload).forEach(([k, v]) => {
+      if (v !== null && v !== undefined) mockUsers[i][k] = v;
+    });
+    return { ...mockUsers[i] };
+  },
+
+  // PUT /api/admin/technicians/{id}/availability
+  async setTechnicianAvailability(id, available) {
+    if (!USE_MOCK) {
+      return http(`/admin/technicians/${encodeURIComponent(id)}/availability`, {
+        method: 'PUT',
+        body: JSON.stringify({ available }),
+      });
+    }
+    const i = mockUsers.findIndex((u) => u.id === id);
+    if (i < 0) throw new Error(`User not found: ${id}`);
+    mockUsers[i].available = available;
+    return { ...mockUsers[i] };
   },
 };
 

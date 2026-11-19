@@ -8,6 +8,7 @@ import CreateIncidentPage from './pages/CreateIncidentPage';
 import IncidentDetailPage from './pages/IncidentDetailPage';
 import TechniciansPage from './pages/TechniciansPage';
 import SlaMonitorPage from './pages/SlaMonitorPage';
+import AdminConsolePage from './pages/AdminConsolePage';
 import LoginPage from './pages/LoginPage';
 
 function AppShell() {
@@ -17,7 +18,7 @@ function AppShell() {
     return <LoginPage />;
   }
 
-  // The technician list endpoint is administrator-only on the backend.
+  // The technician list and admin console endpoints are administrator-only on the backend.
   const canSeeTechnicians = USE_MOCK || isAdmin;
 
   return (
@@ -34,6 +35,10 @@ function AppShell() {
             <Route
               path="/technicians"
               element={canSeeTechnicians ? <TechniciansPage /> : <Navigate to="/" replace />}
+            />
+            <Route
+              path="/admin"
+              element={canSeeTechnicians ? <AdminConsolePage /> : <Navigate to="/" replace />}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

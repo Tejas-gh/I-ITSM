@@ -102,6 +102,11 @@ export default function Navbar() {
                 Technicians
               </NavLink>
             )}
+            {(USE_MOCK || isAdmin) && (
+              <NavLink to="/admin" style={navLinkStyle}>
+                Admin
+              </NavLink>
+            )}
           </nav>
         </div>
 
