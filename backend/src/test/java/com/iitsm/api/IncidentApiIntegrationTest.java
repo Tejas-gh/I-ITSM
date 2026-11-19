@@ -369,7 +369,7 @@ class IncidentApiIntegrationTest {
     @Test
     void suggestCategory_returns200_andEmptyBodyWhenThereIsNoSuggestion() throws Exception {
         HttpResponse<String> r = call("POST", "/api/incidents/suggest-category", "A6-E1",
-                "{\"title\":\"VPN down\",\"description\":\"cannot connect\"}");
+                "{\"title\":\"Something odd happened\",\"description\":\"Please help me\"}");
 
         assertEquals(200, r.statusCode(), r.body());
         assertEquals("", r.body());
