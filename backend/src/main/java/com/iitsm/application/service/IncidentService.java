@@ -60,7 +60,10 @@ import java.util.Optional;
  */
 public final class IncidentService {
 
-    public static final String SYSTEM_ACTOR_ID = "SYSTEM";
+        public static final String SYSTEM_ACTOR_ID = "SYSTEM";
+
+    /** Note text recorded when a resolution is rejected; the frontend labels notes that start with it. */
+    public static final String REJECTION_NOTE = "RESOLUTION_REJECTED: the reporter rejected the proposed resolution and the incident was reopened.";
 
     private final IncidentRepository incidents;
     private final UserRepository users;
@@ -490,6 +493,8 @@ public final class IncidentService {
         permissions.check(actor, IncidentOperation.REJECT_RESOLUTION, incident);
 
         incident.rejectResolution();
+        // Leave a visible trace in the incident history (employee and technician see notes; audit is admin-only)
+        incident.addAdditionalInfo(actorId, REJECTION_NOTE, now);
         incident = incidents.save(incident);
 
         events.publish(new IncidentStatusChanged(

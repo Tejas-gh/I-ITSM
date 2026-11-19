@@ -8,6 +8,7 @@ import SlaBadge from '../components/SlaBadge';
 import LifecycleStepper from '../components/LifecycleStepper';
 import ActionModal from '../components/ActionModal';
 import AuditTimeline from '../components/AuditTimeline';
+import { noteLabel } from '../components/noteLabel';
 import {
   INCIDENT_STATUS,
   ROLE_GROUPS,
@@ -686,7 +687,7 @@ export default function IncidentDetailPage() {
                         color: '#64748b',
                       }}
                     >
-                      {note.type.replace('_', ' ')}
+                                            {noteLabel(note)}
                     </span>
                   </span>
                   <span style={{ fontSize: '11px', color: '#94a3b8' }}>

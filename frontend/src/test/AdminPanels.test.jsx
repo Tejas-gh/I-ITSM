@@ -354,7 +354,7 @@ describe('AdminConsolePage', () => {
     render(<AdminConsolePage />);
 
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent);
-    expect(tabs).toEqual(['Assignment Strategy', 'SLA Policies', 'Users', 'Audit']);
+    expect(tabs).toEqual(['Assignment Strategy', 'SLA Policies', 'Users', 'Services', 'Categories', 'Audit']);
     expect(screen.getByRole('tab', { name: 'Assignment Strategy' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByRole('region', { name: 'Assignment strategy' })).toBeInTheDocument();
   });

@@ -89,9 +89,11 @@ export default function Navbar() {
             <NavLink to="/incidents" style={navLinkStyle}>
               Incidents
             </NavLink>
-            <NavLink to="/sla" style={navLinkStyle}>
-              SLA Monitor
-            </NavLink>
+            {!isEmployee && (
+              <NavLink to="/sla" style={navLinkStyle}>
+                SLA Monitor
+              </NavLink>
+            )}
             {(USE_MOCK || isEmployee) && (
               <NavLink to="/incidents/new" style={navLinkStyle}>
                 + Report Incident

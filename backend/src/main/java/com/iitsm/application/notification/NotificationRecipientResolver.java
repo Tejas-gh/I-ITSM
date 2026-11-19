@@ -64,7 +64,6 @@ public final class NotificationRecipientResolver {
                  "INCIDENT_UPDATED",
                  "WORK_STARTED",
                  "INFO_RECEIVED",
-                 "RESOLUTION_REJECTED",
                  "VERIFIED",
                  "UNASSIGNED",
                  "INCIDENT_STATUS_CHANGED" -> filterAndCollect(
@@ -75,6 +74,7 @@ public final class NotificationRecipientResolver {
             case "INCIDENT_ASSIGNED",
                  "INCIDENT_ACKNOWLEDGED",
                  "INFO_REQUESTED",
+                 "RESOLUTION_REJECTED",
                  "INCIDENT_RESOLVED",
                  "INCIDENT_CLOSED" -> resolveLifecycleRecipients(event, allUsers);
             case "SLA_WARNING", "SLA_VIOLATED" -> filterAndCollect(

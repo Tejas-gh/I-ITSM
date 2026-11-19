@@ -624,6 +624,16 @@ export const incidentApi = {
       inc.status = INCIDENT_STATUS.IN_PROGRESS;
       inc.resolution = null;
       inc.resolvedAt = null;
+      // Same history note the backend records, so the rejection is visible to reporter and technician
+      inc.notes = [
+        ...(inc.notes || []),
+        {
+          authorId: inc.reporterId,
+          type: 'ADDITIONAL_INFO',
+          text: 'RESOLUTION_REJECTED: the reporter rejected the proposed resolution and the incident was reopened.',
+          createdAt: new Date().toISOString(),
+        },
+      ];
     });
   },
 
@@ -856,6 +866,8 @@ const mockPolicies = [
   { serviceId: null, priority: 'P4', responseTarget: 'PT4H', resolutionTarget: 'PT24H' },
 ];
 const mockUsers = INITIAL_USERS.map((u) => ({ ...u }));
+const mockServices = INITIAL_SERVICES.map((x) => ({ ...x }));
+const mockCategories = INITIAL_CATEGORIES.map((x) => ({ active: true, ...x }));
 
 /**
  * Admin API client. Every endpoint is restricted to administrators by the backend (403 otherwise).
@@ -939,6 +951,49 @@ export const adminApi = {
     if (i < 0) throw new Error(`User not found: ${id}`);
     mockUsers[i].available = available;
     return { ...mockUsers[i] };
+  },
+
+  // GET /api/admin/services -> [{ id, name, businessCriticality }]
+  async listServices() {
+    if (!USE_MOCK) return http('/admin/services');
+    return mockServices.map((x) => ({ ...x }));
+  },
+
+  // POST /api/admin/services (upsert by id)
+  async saveService({ id, name, businessCriticality }) {
+    const body = { id, name, businessCriticality };
+    if (!USE_MOCK) return http('/admin/services', { method: 'POST', body: JSON.stringify(body) });
+    const i = mockServices.findIndex((x) => x.id === id);
+    if (i >= 0) mockServices[i] = { ...body };
+    else mockServices.push({ ...body });
+    return { ...body };
+  },
+
+  // GET /api/admin/categories -> [{ id, name, active }] (includes inactive)
+  async listCategories() {
+    if (!USE_MOCK) return http('/admin/categories');
+    return mockCategories.map((x) => ({ ...x }));
+  },
+
+  // POST /api/admin/categories (upsert by id; always send `active` so an edit never changes the status)
+  async saveCategory({ id, name, active }) {
+    const body = { id, name, active };
+    if (!USE_MOCK) return http('/admin/categories', { method: 'POST', body: JSON.stringify(body) });
+    const i = mockCategories.findIndex((x) => x.id === id);
+    if (i >= 0) mockCategories[i] = { ...body };
+    else mockCategories.push({ ...body });
+    return { ...body };
+  },
+
+  // POST /api/admin/categories/{id}/activate | /deactivate
+  async setCategoryActive(id, active) {
+    if (!USE_MOCK) {
+      return http(`/admin/categories/${encodeURIComponent(id)}/${active ? 'activate' : 'deactivate'}`, { method: 'POST' });
+    }
+    const i = mockCategories.findIndex((x) => x.id === id);
+    if (i < 0) throw new Error(`Category not found: ${id}`);
+    mockCategories[i].active = active;
+    return { ...mockCategories[i] };
   },
 };
 

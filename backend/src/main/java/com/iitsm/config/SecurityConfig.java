@@ -7,6 +7,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -29,7 +30,7 @@ import com.iitsm.infrastructure.security.JwtTokenService;
  *
  * <p>Only the login and register endpoints (and the container's {@code /error} dispatch) are public;
  * every other request needs a valid token. Who may perform which operation stays in the application layer
- * ({@code IncidentPermissionPolicy}), so no per-endpoint role rules are configured here. The token's
+ * ({@code IncidentPermissionPolicy}), the only role rule here is the staff-only SLA monitoring read endpoints. The token's
  * {@code role} claim becomes the authority {@code ROLE_<Role>}; the principal name is the user id.</p>
  */
 @Configuration
@@ -50,6 +51,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/api/auth/login", "/api/auth/register", "/error").permitAll()
+                        // SLA monitoring reads are for staff only; employees get 403 (POST /api/sla/monitor/run
+                        // stays administrator-only in the application layer)
+                        .requestMatchers(HttpMethod.GET, "/api/sla/violations", "/api/sla/at-risk")
+                        .hasAnyRole("TECHNICIAN", "TEAM_LEAD", "ADMINISTRATOR", "IT_MANAGER")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(converter)));
         return http.build();

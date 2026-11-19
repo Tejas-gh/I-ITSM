@@ -175,6 +175,23 @@ class IncidentServiceWorkflowTest {
     }
 
     @Test
+    @DisplayName("rejectResolution records a visible history note so employee and technician can see the rejection")
+    void rejectResolution_recordsRejectionNoteInHistory() {
+        f.service.acknowledgeIncident(f.technician.getId(), assignedIncident.getId());
+        f.service.startWork(f.technician.getId(), assignedIncident.getId());
+        f.service.resolveIncident(new IncidentTextCommand(f.technician.getId(), assignedIncident.getId(), "Fixed"));
+        int notesBefore = f.service.getIncident(f.admin.getId(), assignedIncident.getId()).getNotes().size();
+
+        Incident reopened = f.service.rejectResolution(f.employee.getId(), assignedIncident.getId());
+
+        assertEquals(notesBefore + 1, reopened.getNotes().size());
+        var note = reopened.getNotes().get(reopened.getNotes().size() - 1);
+        assertEquals(f.employee.getId(), note.authorId());
+        assertTrue(note.text().startsWith("RESOLUTION_REJECTED"));
+        assertEquals(IncidentService.REJECTION_NOTE, note.text());
+    }
+
+    @Test
     @DisplayName("closeIncident by admin moves state to CLOSED and publishes IncidentClosed event")
     void closeIncident_happyPath_closesAndPublishesEvent() {
         f.service.acknowledgeIncident(f.technician.getId(), assignedIncident.getId());

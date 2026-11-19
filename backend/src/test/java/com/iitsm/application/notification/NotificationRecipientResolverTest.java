@@ -266,6 +266,32 @@ class NotificationRecipientResolverTest {
 
         List<String> recipients = resolver.resolveRecipientIds(event);
 
-        assertTrue(recipients.isEmpty());
+              assertTrue(recipients.isEmpty());
+    }
+
+    @Test
+    @DisplayName("RESOLUTION_REJECTED: assignee + admins notified; reporter (the actor) and unrelated users excluded")
+    void resolutionRejected_assigneeAndAdminsNotified_actorAndUnrelatedExcluded() {
+        saveAllUsers();
+        DomainEvent e = new IncidentStatusChanged(NOW, "emp-1", INC, IncidentStatus.RESOLVED,
+                IncidentStatus.IN_PROGRESS, "Resolution rejected", "RESOLUTION_REJECTED");
+
+        List<String> r = resolve(e, tech1);
+
+        assertEquals(java.util.Set.of("tech-1", "admin-1", "admin-2"), new java.util.HashSet<>(r));
+        assertFalse(r.contains("tech-2"), "unassigned technician must not be notified");
+        assertFalse(r.contains("emp-other"), "unrelated employee must not be notified");
+        assertEquals(r.size(), new java.util.HashSet<>(r).size(), "no duplicates");
+    }
+
+    @Test
+    @DisplayName("RESOLUTION_REJECTED: an inactive assignee is not notified")
+    void resolutionRejected_inactiveAssigneeExcluded() {
+        saveAllUsers();
+        tech1.deactivate();
+        DomainEvent e = new IncidentStatusChanged(NOW, "emp-1", INC, IncidentStatus.RESOLVED,
+                IncidentStatus.IN_PROGRESS, "Resolution rejected", "RESOLUTION_REJECTED");
+
+        assertFalse(resolve(e, tech1).contains("tech-1"));
     }
 }

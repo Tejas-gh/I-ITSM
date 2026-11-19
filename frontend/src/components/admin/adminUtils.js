@@ -20,3 +20,6 @@ export function formatSkills(skills) {
 }
 
 export const isTechnicianRole = (role) => role === 'TECHNICIAN' || role === 'TEAM_LEAD';
+
+/** Category ids are stable codes such as NETWORK or CLOUD_OPS (same rule as the backend Category). */
+export const CATEGORY_ID_PATTERN = /^[A-Z][A-Z0-9_]*$/;

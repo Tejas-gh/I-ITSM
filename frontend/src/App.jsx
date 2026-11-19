@@ -12,7 +12,7 @@ import AdminConsolePage from './pages/AdminConsolePage';
 import LoginPage from './pages/LoginPage';
 
 function AppShell() {
-  const { isAuthenticated, isAdmin } = useAuth();
+  const { isAuthenticated, isAdmin, isEmployee } = useAuth();
 
   if (!isAuthenticated) {
     return <LoginPage />;
@@ -31,7 +31,10 @@ function AppShell() {
             <Route path="/incidents" element={<IncidentListPage />} />
             <Route path="/incidents/new" element={<CreateIncidentPage />} />
             <Route path="/incidents/:id" element={<IncidentDetailPage />} />
-            <Route path="/sla" element={<SlaMonitorPage />} />
+            <Route 
+              path="/sla"
+              element={isEmployee ? <Navigate to="/" replace /> : <SlaMonitorPage />}
+            />
             <Route
               path="/technicians"
               element={canSeeTechnicians ? <TechniciansPage /> : <Navigate to="/" replace />}

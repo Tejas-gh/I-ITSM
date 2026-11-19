@@ -67,6 +67,10 @@ public final class NotificationFactory {
                     "P1 Incident Escalated",
                     "P1 Incident " + incidentId + " has been escalated due to unacknowledged response delay."
             ));
+            case "RESOLUTION_REJECTED" -> Optional.of(new NotificationTemplate(
+                    "Resolution Rejected",
+                    "The resolution of incident " + incidentId + " was rejected and the incident is back in progress."
+            ));
             case "NOTE_ADDED",
                  "ADDITIONAL_INFO_ADDED",
                  "FEEDBACK_SUBMITTED",
@@ -74,7 +78,6 @@ public final class NotificationFactory {
                  "WORK_STARTED",
                  "INFO_REQUESTED",
                  "INFO_RECEIVED",
-                 "RESOLUTION_REJECTED",
                  "VERIFIED",
                  "UNASSIGNED",
                  "INCIDENT_STATUS_CHANGED" -> Optional.of(new NotificationTemplate(

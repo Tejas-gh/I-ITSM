@@ -2,16 +2,20 @@ import { useState } from 'react';
 import StrategyPanel from '../components/admin/StrategyPanel';
 import SlaPoliciesPanel from '../components/admin/SlaPoliciesPanel';
 import UsersPanel from '../components/admin/UsersPanel';
+import ServicesPanel from '../components/admin/ServicesPanel';
+import CategoriesPanel from '../components/admin/CategoriesPanel';
 import AuditPanel from '../components/admin/AuditPanel';
 
 const TABS = [
   { id: 'strategy', label: 'Assignment Strategy', Panel: StrategyPanel },
   { id: 'sla', label: 'SLA Policies', Panel: SlaPoliciesPanel },
   { id: 'users', label: 'Users', Panel: UsersPanel },
+  { id: 'services', label: 'Services', Panel: ServicesPanel },
+  { id: 'categories', label: 'Categories', Panel: CategoriesPanel },
   { id: 'audit', label: 'Audit', Panel: AuditPanel },
 ];
 
-/** Admin Console Stage 1: assignment strategy, SLA policies, users and audit. */
+/** Admin Console: assignment strategy, SLA policies, users, services, categories and audit. */
 export default function AdminConsolePage() {
   const [active, setActive] = useState('strategy');
   const { Panel } = TABS.find((t) => t.id === active);
