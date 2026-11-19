@@ -8,7 +8,8 @@ import SlaBadge from '../components/SlaBadge';
 import { INCIDENT_STATUS, PRIORITY_LEVEL } from '../constants/itsmConstants';
 
 export default function DashboardPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, isEmployee } = useAuth();
+  const slaClickable = !isEmployee;
   const [incidents, setIncidents] = useState([]);
   const [services, setServices] = useState([]);
   const [atRiskAlerts, setAtRiskAlerts] = useState([]);
@@ -128,29 +129,29 @@ export default function DashboardPage() {
           <div style={metricSubStyle}>Immediate escalation</div>
         </div>
 
-        <Link to="/sla" style={{ ...cardStyle, textDecoration: 'none', cursor: 'pointer' }}>
+        <SlaCard to="/sla" clickable={slaClickable}>
           <div style={metricLabelStyle}>⚠️ SLA At-Risk</div>
           <div style={{ ...metricValueStyle, color: totalAtRisk > 0 ? '#d97706' : '#16a34a' }}>
             {totalAtRisk}
           </div>
-          <div style={metricSubStyle}>Within 20% deadline threshold →</div>
-        </Link>
+          <div style={metricSubStyle}>Within 20% deadline threshold{slaClickable ? ' →' : ''}</div>
+        </SlaCard>
 
-        <Link to="/sla" style={{ ...cardStyle, textDecoration: 'none', cursor: 'pointer' }}>
+        <SlaCard to="/sla" clickable={slaClickable}>
           <div style={metricLabelStyle}>🚨 SLA Violations</div>
           <div style={{ ...metricValueStyle, color: totalViolations > 0 ? '#dc2626' : '#16a34a' }}>
             {totalViolations}
           </div>
-          <div style={metricSubStyle}>Breached SLA policies →</div>
-        </Link>
+          <div style={metricSubStyle}>Breached SLA policies{slaClickable ? ' →' : ''}</div>
+        </SlaCard>
 
-        <Link to="/sla" style={{ ...cardStyle, textDecoration: 'none', cursor: 'pointer' }}>
+        <SlaCard to="/sla" clickable={slaClickable}>
           <div style={metricLabelStyle}>📈 SLA Compliance</div>
           <div style={{ ...metricValueStyle, color: complianceRate >= 90 ? '#16a34a' : complianceRate >= 70 ? '#d97706' : '#dc2626' }}>
             {complianceRate}%
           </div>
-          <div style={metricSubStyle}>Target ≥ 95% →</div>
-        </Link>
+          <div style={metricSubStyle}>Target ≥ 95%{slaClickable ? ' →' : ''}</div>
+        </SlaCard>
       </div>
 
       {/* Two columns: Service breakdown & Recent Incidents */}
@@ -247,6 +248,18 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function SlaCard({ to, clickable, children }) {
+  if (!clickable) {
+    return <div style={cardStyle}>{children}</div>;
+  }
+
+  return (
+    <Link to={to} style={{ ...cardStyle, textDecoration: 'none', cursor: 'pointer' }}>
+      {children}
+    </Link>
   );
 }
 
