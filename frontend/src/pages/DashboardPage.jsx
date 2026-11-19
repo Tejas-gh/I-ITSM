@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { incidentApi, referenceApi } from '../api/apiClient';
+import { incidentApi, referenceApi, slaApi } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
@@ -11,18 +11,24 @@ export default function DashboardPage() {
   const { currentUser } = useAuth();
   const [incidents, setIncidents] = useState([]);
   const [services, setServices] = useState([]);
+  const [atRiskAlerts, setAtRiskAlerts] = useState([]);
+  const [violationAlerts, setViolationAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
-        const [incList, srvList] = await Promise.all([
+        const [incList, srvList, atRiskList, violList] = await Promise.all([
           incidentApi.listVisibleIncidents(currentUser),
           referenceApi.listServices(),
+          slaApi.getAtRisk().catch(() => []),
+          slaApi.getViolations().catch(() => []),
         ]);
-        setIncidents(incList);
-        setServices(srvList);
+        setIncidents(incList || []);
+        setServices(srvList || []);
+        setAtRiskAlerts(atRiskList || []);
+        setViolationAlerts(violList || []);
       } catch (err) {
         console.error('Failed to load dashboard data', err);
       } finally {
@@ -46,16 +52,16 @@ export default function DashboardPage() {
     (i) => i.status !== INCIDENT_STATUS.RESOLVED && i.status !== INCIDENT_STATUS.VERIFIED && i.status !== INCIDENT_STATUS.CLOSED
   ).length;
   const criticalCount = incidents.filter((i) => i.priority === PRIORITY_LEVEL.P1).length;
-  const resolvedCount = incidents.filter(
-    (i) => i.status === INCIDENT_STATUS.RESOLVED || i.status === INCIDENT_STATUS.VERIFIED || i.status === INCIDENT_STATUS.CLOSED
-  ).length;
 
   const now = new Date();
-  const slaBreaches = incidents.filter((i) => {
+  const calculatedBreaches = incidents.filter((i) => {
     if (i.status === INCIDENT_STATUS.CLOSED) return false;
     const resDeadline = i.resolutionDeadline ? new Date(i.resolutionDeadline) : null;
     return resDeadline && now > resDeadline && !i.resolvedAt;
   }).length;
+  const totalViolations = Math.max(violationAlerts.length, calculatedBreaches);
+  const totalAtRisk = atRiskAlerts.length;
+  const complianceRate = total > 0 ? Math.max(0, Math.round(((total - totalViolations) / total) * 100)) : 100;
 
   // Workload / Service Breakdown
   const serviceCounts = {};
@@ -99,7 +105,7 @@ export default function DashboardPage() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: '16px',
           marginBottom: '32px',
         }}
@@ -122,19 +128,29 @@ export default function DashboardPage() {
           <div style={metricSubStyle}>Immediate escalation</div>
         </div>
 
-        <div style={cardStyle}>
-          <div style={metricLabelStyle}>Resolved & Closed</div>
-          <div style={{ ...metricValueStyle, color: '#16a34a' }}>{resolvedCount}</div>
-          <div style={metricSubStyle}>Completed resolution</div>
-        </div>
-
-        <div style={cardStyle}>
-          <div style={metricLabelStyle}>Active SLA Breaches</div>
-          <div style={{ ...metricValueStyle, color: slaBreaches > 0 ? '#dc2626' : '#16a34a' }}>
-            {slaBreaches}
+        <Link to="/sla" style={{ ...cardStyle, textDecoration: 'none', cursor: 'pointer' }}>
+          <div style={metricLabelStyle}>⚠️ SLA At-Risk</div>
+          <div style={{ ...metricValueStyle, color: totalAtRisk > 0 ? '#d97706' : '#16a34a' }}>
+            {totalAtRisk}
           </div>
-          <div style={metricSubStyle}>Resolution past target</div>
-        </div>
+          <div style={metricSubStyle}>Within 20% deadline threshold →</div>
+        </Link>
+
+        <Link to="/sla" style={{ ...cardStyle, textDecoration: 'none', cursor: 'pointer' }}>
+          <div style={metricLabelStyle}>🚨 SLA Violations</div>
+          <div style={{ ...metricValueStyle, color: totalViolations > 0 ? '#dc2626' : '#16a34a' }}>
+            {totalViolations}
+          </div>
+          <div style={metricSubStyle}>Breached SLA policies →</div>
+        </Link>
+
+        <Link to="/sla" style={{ ...cardStyle, textDecoration: 'none', cursor: 'pointer' }}>
+          <div style={metricLabelStyle}>📈 SLA Compliance</div>
+          <div style={{ ...metricValueStyle, color: complianceRate >= 90 ? '#16a34a' : complianceRate >= 70 ? '#d97706' : '#dc2626' }}>
+            {complianceRate}%
+          </div>
+          <div style={metricSubStyle}>Target ≥ 95% →</div>
+        </Link>
       </div>
 
       {/* Two columns: Service breakdown & Recent Incidents */}

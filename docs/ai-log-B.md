@@ -110,6 +110,20 @@
     - `SlaSchedulerTest`: 2 tests verifying scheduler invocation and exception isolation without rethrowing.
 - **Outcome:** Total backend test suite: 728 tests passing (0 failures, 0 errors). Frontend remains green (17/17 tests passing, build passing, 0 ESLint warnings). B4 complete and unblocked.
 
+## Session 11: Gate B5 — SLA & Smart Recommendation UI (2026-11-19)
+- **Task:** Implemented Gate B5 (SLA Monitor and compliance center dashboard, admin manual run button, SLA metrics and warning/violation tabs, and smart technician recommendations in Assign modal).
+- **Files Created/Updated:**
+  - `frontend/src/api/apiClient.js`: Added `slaApi` (`getViolations`, `getAtRisk`, `runMonitor`) and `incidentApi.getRecommendations(id)`.
+  - `frontend/src/pages/SlaMonitorPage.jsx`: Full SLA surveillance dashboard displaying KPI metrics (At-Risk count, Violations count, Compliance %, Monitored Open Incidents count), manual "Run SLA Monitor Now" admin action, filter search, and tabbed inspection for Warnings (≤20% threshold), Violations (breached targets), and All Open Incidents.
+  - `frontend/src/pages/DashboardPage.jsx`: Connected SLA at-risk warnings and violations tiles linking to `/sla` with live compliance rate calculation.
+  - `frontend/src/components/ActionModal.jsx`: Integrated smart recommendations for `actionType === 'technician'`. Renders ranked cards displaying "#1 Best Fit" badges, ranking scores, match reasons, and active workload/capacity, while maintaining fallback manual selection.
+  - `frontend/src/pages/IncidentDetailPage.jsx`: Passed `incidentId` prop to `ActionModal` to enable smart recommendation fetching.
+  - `frontend/src/App.jsx` & `frontend/src/components/Navbar.jsx`: Configured `/sla` route and navigation link.
+  - Unit Tests:
+    - `frontend/src/test/SlaMonitor.test.jsx`: 3 tests verifying KPI rendering, tab navigation between at-risk and violations, and admin manual monitor execution.
+    - `frontend/src/test/ActionModalRecommendations.test.jsx`: 2 tests verifying smart recommendation fetching, display of ranked cards with reasons and scores, and selection confirmation.
+- **Outcome:** Frontend test suite expanded to 43/43 tests passing (0 failures). Production build PASS. ESLint 0 errors, 0 warnings. Backend test suite remains 100% green at 766/766 tests passing. Gate B5 complete.
+
 
 
 

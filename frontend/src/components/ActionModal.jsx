@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { incidentApi } from '../api/apiClient';
 
 export default function ActionModal({
   isOpen,
@@ -7,6 +8,7 @@ export default function ActionModal({
   actionLabel = 'Submit',
   actionType = 'text', // 'text' | 'feedback' | 'technician'
   technicians = [],
+  incidentId = null,
   onConfirm,
   onClose,
 }) {
@@ -16,6 +18,36 @@ export default function ActionModal({
   const [selectedTech, setSelectedTech] = useState(technicians[0]?.id || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Smart recommendations state
+  const [recommendations, setRecommendations] = useState([]);
+  const [recLoading, setRecLoading] = useState(false);
+
+  useEffect(() => {
+    let ignore = false;
+    async function loadRecs() {
+      if (actionType === 'technician' && incidentId && isOpen) {
+        setRecLoading(true);
+        try {
+          const recs = await incidentApi.getRecommendations(incidentId);
+          if (!ignore && recs && recs.length > 0) {
+            setRecommendations(recs);
+            // Default select top recommendation if available
+            setSelectedTech(recs[0].technicianId);
+          }
+        } catch {
+          // Non-blocking: manual selection remains possible
+          if (!ignore) setRecommendations([]);
+        } finally {
+          if (!ignore) setRecLoading(false);
+        }
+      }
+    }
+    loadRecs();
+    return () => {
+      ignore = true;
+    };
+  }, [actionType, incidentId, isOpen]);
 
   if (!isOpen) return null;
 
@@ -65,8 +97,10 @@ export default function ActionModal({
         style={{
           backgroundColor: '#fff',
           borderRadius: '12px',
-          width: '500px',
-          maxWidth: '92%',
+          width: actionType === 'technician' ? '560px' : '500px',
+          maxWidth: '94%',
+          maxHeight: '90vh',
+          overflowY: 'auto',
           padding: '24px',
           boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
         }}
@@ -123,27 +157,142 @@ export default function ActionModal({
 
           {actionType === 'technician' && (
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#334155' }}>
-                Select Assignee:
-              </label>
-              <select
-                value={selectedTech}
-                onChange={(e) => setSelectedTech(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '14px',
-                  backgroundColor: '#fff',
-                }}
-              >
-                {technicians.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.id}) — {t.available ? 'Available' : 'Unavailable'}
-                  </option>
-                ))}
-              </select>
+              {/* Smart Recommendations Section (Gate B2 / B5) */}
+              <div style={{ marginBottom: '18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🎯</span> Smart Technician Recommendations
+                  </label>
+                  {recLoading && (
+                    <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: '500' }}>
+                      Analyzing skill & load...
+                    </span>
+                  )}
+                </div>
+
+                {recommendations.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                    {recommendations.map((rec, index) => {
+                      const isSelected = selectedTech === rec.technicianId;
+                      return (
+                        <div
+                          key={rec.technicianId}
+                          data-testid={`rec-card-${rec.technicianId}`}
+                          onClick={() => setSelectedTech(rec.technicianId)}
+                          style={{
+                            padding: '12px 14px',
+                            borderRadius: '8px',
+                            border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                            backgroundColor: isSelected ? '#eff6ff' : '#f8fafc',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              <span
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: index === 0 ? '#dbeafe' : '#f1f5f9',
+                                  color: index === 0 ? '#1e40af' : '#475569',
+                                }}
+                              >
+                                #{index + 1} {index === 0 ? 'Best Fit' : ''}
+                              </span>
+                              <strong style={{ fontSize: '14px', color: '#0f172a' }}>{rec.name}</strong>
+                              <span style={{ fontSize: '12px', color: '#64748b' }}>({rec.technicianId})</span>
+                              <span
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#fef3c7',
+                                  color: '#b45309',
+                                }}
+                              >
+                                Score: {typeof rec.score === 'number' ? rec.score.toFixed(1) : rec.score}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#475569', marginBottom: '2px' }}>
+                              {rec.reason}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', gap: '12px' }}>
+                              <span>Workload: <strong>{rec.activeWorkload}</strong> / {rec.maxCapacity} active</span>
+                              {rec.yearsOfExperience != null && (
+                                <span>Experience: <strong>{rec.yearsOfExperience}y</strong></span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTech(rec.technicianId);
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: '6px',
+                              border: isSelected ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                              backgroundColor: isSelected ? '#2563eb' : '#fff',
+                              color: isSelected ? '#fff' : '#334155',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {isSelected ? '✓ Selected' : 'Select'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : !recLoading ? (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      backgroundColor: '#f1f5f9',
+                      fontSize: '12px',
+                      color: '#64748b',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    No automated technician recommendations available for this incident. Please choose manually below.
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Manual Selection Fallback */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: '#475569' }}>
+                  Or select technician manually:
+                </label>
+                <select
+                  value={selectedTech}
+                  onChange={(e) => setSelectedTech(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '14px',
+                    backgroundColor: '#fff',
+                  }}
+                >
+                  {technicians.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.id}) — {t.available ? 'Available' : 'Unavailable'}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 

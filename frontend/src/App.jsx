@@ -7,6 +7,7 @@ import IncidentListPage from './pages/IncidentListPage';
 import CreateIncidentPage from './pages/CreateIncidentPage';
 import IncidentDetailPage from './pages/IncidentDetailPage';
 import TechniciansPage from './pages/TechniciansPage';
+import SlaMonitorPage from './pages/SlaMonitorPage';
 import LoginPage from './pages/LoginPage';
 
 function AppShell() {
@@ -29,6 +30,7 @@ function AppShell() {
             <Route path="/incidents" element={<IncidentListPage />} />
             <Route path="/incidents/new" element={<CreateIncidentPage />} />
             <Route path="/incidents/:id" element={<IncidentDetailPage />} />
+            <Route path="/sla" element={<SlaMonitorPage />} />
             <Route
               path="/technicians"
               element={canSeeTechnicians ? <TechniciansPage /> : <Navigate to="/" replace />}

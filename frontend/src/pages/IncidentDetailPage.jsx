@@ -646,6 +646,7 @@ export default function IncidentDetailPage() {
         actionLabel={modalConfig.actionLabel}
         actionType={modalConfig.actionType}
         technicians={technicians}
+        incidentId={incident.id}
         onConfirm={modalConfig.onConfirm}
         onClose={closeModal}
       />

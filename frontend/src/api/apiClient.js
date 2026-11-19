@@ -627,6 +627,41 @@ export const incidentApi = {
     });
   },
 
+  // GET /api/incidents/{id}/recommendations (Gate B2)
+  async getRecommendations(id) {
+    if (!USE_MOCK) {
+      return http(`/incidents/${encodeURIComponent(id)}/recommendations`);
+    }
+
+    // Mock recommendations fallback
+    return [
+      {
+        technicianId: 'TECH01',
+        name: 'Alex Rivera',
+        email: 'alex.rivera@iitsm.local',
+        role: 'TECHNICIAN',
+        score: 92.0,
+        reason: 'Skill level 5 in category; 1 active incident',
+        activeWorkload: 1,
+        maxCapacity: 5,
+        skillLevels: { NETWORK: 5, DATABASE: 3 },
+        yearsOfExperience: 6,
+      },
+      {
+        technicianId: 'TECH02',
+        name: 'Sam Chen',
+        email: 'sam.chen@iitsm.local',
+        role: 'TECHNICIAN',
+        score: 78.0,
+        reason: 'Skill level 3 in category; 0 active incidents',
+        activeWorkload: 0,
+        maxCapacity: 5,
+        skillLevels: { NETWORK: 3, DATABASE: 4 },
+        yearsOfExperience: 4,
+      },
+    ];
+  },
+
   // Internal helper to update and persist mock store
   _updateIncident(id, mutator) {
     mockIncidents = getStoredIncidents();
@@ -710,5 +745,42 @@ export const auditApi = {
       return http(`/audit/incidents/${encodeURIComponent(incidentId)}`);
     }
     return [];
+  },
+};
+
+/**
+ * SLA API client (Gate B4 & B5).
+ */
+export const slaApi = {
+  // GET /api/sla/violations
+  async getViolations(incidentId) {
+    if (!USE_MOCK) {
+      const q = incidentId ? `?incidentId=${encodeURIComponent(incidentId)}` : '';
+      return http(`/sla/violations${q}`);
+    }
+    return [];
+  },
+
+  // GET /api/sla/at-risk
+  async getAtRisk(incidentId) {
+    if (!USE_MOCK) {
+      const q = incidentId ? `?incidentId=${encodeURIComponent(incidentId)}` : '';
+      return http(`/sla/at-risk${q}`);
+    }
+    return [];
+  },
+
+  // POST /api/sla/monitor/run (ADMIN only)
+  async runMonitor() {
+    if (!USE_MOCK) {
+      return http('/sla/monitor/run', { method: 'POST' });
+    }
+    return {
+      scannedCount: 0,
+      warningsRaised: 0,
+      violationsRaised: 0,
+      errorCount: 0,
+      ranAt: new Date().toISOString(),
+    };
   },
 };
