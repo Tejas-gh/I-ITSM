@@ -366,6 +366,69 @@ export const incidentApi = {
     return null;
   },
 
+  // POST /api/incidents/check-duplicates
+  async checkDuplicates(payload) {
+    if (!USE_MOCK) {
+      return http('/incidents/check-duplicates', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    }
+
+    mockIncidents = getStoredIncidents();
+    if (!payload || !payload.title || !payload.title.trim()) {
+      return { hasDuplicates: false, candidates: [] };
+    }
+
+    const queryTitle = payload.title.trim().toLowerCase();
+    const queryTokens = queryTitle.split(/[^a-zA-Z0-9]+/).filter((w) => w.length >= 3);
+
+    const candidates = [];
+    for (const inc of mockIncidents) {
+      if (!inc || inc.status === 'CLOSED') continue;
+      const targetTitle = (inc.title || '').trim();
+      if (!targetTitle) continue;
+
+      if (queryTitle === targetTitle.toLowerCase()) {
+        candidates.push({
+          id: inc.id,
+          title: inc.title,
+          status: inc.status,
+          score: 1.0,
+          matchReason: 'Exact title match with active open incident',
+        });
+        continue;
+      }
+
+      const targetTokens = targetTitle.toLowerCase().split(/[^a-zA-Z0-9]+/).filter((w) => w.length >= 3);
+      const common = queryTokens.filter((t) => targetTokens.includes(t));
+      if (common.length >= 1) {
+        const sameService = payload.serviceId && payload.serviceId === inc.serviceId;
+        const sameCat = payload.categoryId && payload.categoryId === inc.categoryId;
+        let score = (common.length / Math.max(queryTokens.length, targetTokens.length)) * 0.7;
+        if (sameService) score += 0.2;
+        if (sameCat) score += 0.15;
+        score = Math.min(1.0, Math.round(score * 100) / 100);
+
+        if (score >= 0.35 || common.length >= 2) {
+          candidates.push({
+            id: inc.id,
+            title: inc.title,
+            status: inc.status,
+            score,
+            matchReason: `Shares keyword(s): [${common.join(', ')}]`,
+          });
+        }
+      }
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    return {
+      hasDuplicates: candidates.length > 0,
+      candidates: candidates.slice(0, 5),
+    };
+  },
+
   // POST /api/incidents/{id}/assign
   async assignIncident(id, technicianId) {
     if (!USE_MOCK) {

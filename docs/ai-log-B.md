@@ -162,6 +162,23 @@
     - Frontend: `IncidentEscalationIndicator.test.jsx`.
 - **Outcome:** Backend test suite expanded to 792/792 tests passing (0 failures, 0 errors). Frontend test suite expanded to 45/45 tests passing (0 failures). Production build PASS. ESLint 0 warnings. B6 complete and unblocks Developer A for Gate A7.
 
+## Session 13: Gate B7 — Duplicate Detection Advisory & UI (2026-11-19)
+- **Task:** Implemented Gate B7 (Advisory duplicate incident detection for report creation, safe visibility boundary excluding reporter and description, keyword token overlap and Jaccard similarity scoring with service/category boosts, non-blocking UI advisory banner with candidate inspection).
+- **Files Created/Updated:**
+  - `backend/src/main/java/com/iitsm/api/dto/CheckDuplicateRequest.java`: DTO containing `title`, `description`, `serviceId`, `categoryId`.
+  - `backend/src/main/java/com/iitsm/api/dto/DuplicateCandidateResponse.java`: Safe DTO exposing only `id`, `title`, `status`, `score`, `matchReason` to ensure zero leakage of reporter identity or sensitive private details.
+  - `backend/src/main/java/com/iitsm/api/dto/CheckDuplicateResponse.java`: Response payload containing `hasDuplicates` boolean and sorted list of top candidates.
+  - `backend/src/main/java/com/iitsm/application/service/DuplicateDetectionService.java`: Advisory duplicate detection service performing token extraction, stopword filtering, exact title matching, Jaccard token overlap ratio, and service/category context score boosts. Skips CLOSED incidents and returns top 5 matches.
+  - `backend/src/main/java/com/iitsm/api/DuplicateDetectionController.java`: REST controller exposing `POST /api/incidents/check-duplicates` and `POST /api/check-duplicates`.
+  - `backend/src/main/java/com/iitsm/config/DuplicateDetectionConfig.java`: Spring configuration registering `DuplicateDetectionService`.
+  - `frontend/src/api/apiClient.js`: Added `incidentApi.checkDuplicates(payload)`.
+  - `frontend/src/pages/CreateIncidentPage.jsx`: Added "🔍 Check Duplicates" trigger, auto-check on title blur, advisory duplicate warning banner with safe candidate cards (ID, title, status, % match, match reason, link to view ticket), and dismiss/continue submitting actions.
+  - Tests:
+    - Backend: `DuplicateDetectionServiceTest.java` (6 unit tests), `DuplicateDetectionControllerTest.java` (3 unit tests).
+    - Frontend: `frontend/src/test/DuplicateDetection.test.jsx` (4 unit tests).
+- **Outcome:** Backend test suite expanded to 801/801 tests passing (0 failures, 0 errors). Frontend test suite expanded to 49/49 tests passing (0 failures). Production build PASS. ESLint 0 errors, 0 warnings. B7 complete.
+
+
 
 
 

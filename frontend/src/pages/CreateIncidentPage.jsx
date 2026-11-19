@@ -33,6 +33,12 @@ export default function CreateIncidentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
+  // Duplicate detection UI state (Gate B7)
+  const [duplicateCandidates, setDuplicateCandidates] = useState([]);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [duplicateChecked, setDuplicateChecked] = useState(false);
+  const [duplicatesDismissed, setDuplicatesDismissed] = useState(false);
+
   useEffect(() => {
     async function loadMetadata() {
       try {
@@ -93,6 +99,36 @@ export default function CreateIncidentPage() {
     }
   };
 
+  // Duplicate detection hook (Gate B7)
+  const handleCheckDuplicates = async (customTitle) => {
+    const titleToCheck = customTitle !== undefined ? customTitle : title;
+    if (!titleToCheck || titleToCheck.trim().length < 3) {
+      setDuplicateCandidates([]);
+      setDuplicateChecked(false);
+      return;
+    }
+    try {
+      setCheckingDuplicates(true);
+      const res = await incidentApi.checkDuplicates({
+        title: titleToCheck.trim(),
+        description: description.trim(),
+        serviceId: serviceId || null,
+        categoryId: categoryId || null,
+      });
+      if (res && res.candidates) {
+        setDuplicateCandidates(res.candidates);
+        setDuplicatesDismissed(false);
+      } else {
+        setDuplicateCandidates([]);
+      }
+      setDuplicateChecked(true);
+    } catch (err) {
+      console.error('Error checking duplicates', err);
+    } finally {
+      setCheckingDuplicates(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -147,19 +183,197 @@ export default function CreateIncidentPage() {
       )}
 
       <form onSubmit={handleSubmit} style={formCardStyle}>
-        {/* Title */}
+        {/* Title & Duplicate Detection (Gate B7) */}
         <div style={{ marginBottom: '20px' }}>
-          <label style={labelStyle}>Incident Title *</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Incident Title *</label>
+            <button
+              type="button"
+              onClick={() => handleCheckDuplicates()}
+              disabled={checkingDuplicates || !title.trim()}
+              style={{
+                background: '#fef3c7',
+                color: '#b45309',
+                border: '1px solid #fde68a',
+                borderRadius: '6px',
+                padding: '4px 10px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+              }}
+            >
+              {checkingDuplicates ? 'Checking Duplicates...' : '🔍 Check Duplicates'}
+            </button>
+          </div>
           <input
             type="text"
             required
             maxLength={200}
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              if (duplicateChecked) setDuplicateChecked(false);
+            }}
+            onBlur={() => {
+              if (title.trim().length >= 3 && !duplicateChecked) {
+                handleCheckDuplicates();
+              }
+            }}
             placeholder="e.g., Payment gateway 504 timeout during checkout"
             style={inputStyle}
           />
-          <div style={helpTextStyle}>Brief, descriptive summary of the disruption (1..200 chars).</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={helpTextStyle}>Brief, descriptive summary of the disruption (1..200 chars).</span>
+            {duplicateChecked && duplicateCandidates.length === 0 && (
+              <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600', marginTop: '4px' }}>
+                ✓ No active duplicates detected
+              </span>
+            )}
+          </div>
+
+          {/* Advisory Duplicate Candidates Banner (Gate B7) */}
+          {duplicateCandidates.length > 0 && !duplicatesDismissed && (
+            <div
+              data-testid="duplicate-advisory-banner"
+              style={{
+                marginTop: '12px',
+                padding: '14px 16px',
+                backgroundColor: '#fffbeb',
+                border: '1px solid #fde68a',
+                borderRadius: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 4px 0', color: '#92400e', fontSize: '13px', fontWeight: '700' }}>
+                    ⚠️ Potential Duplicate Incidents Detected ({duplicateCandidates.length})
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#b45309' }}>
+                    Similar active incidents already exist. Review before submitting to avoid redundant work:
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDuplicatesDismissed(true)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#b45309',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+
+              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {duplicateCandidates.map((candidate) => (
+                  <div
+                    key={candidate.id}
+                    data-testid="duplicate-candidate-card"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                      backgroundColor: '#ffffff',
+                      borderRadius: '6px',
+                      border: '1px solid #fef3c7',
+                    }}
+                  >
+                    <div style={{ flex: 1, marginRight: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontFamily: 'monospace',
+                            fontWeight: '700',
+                            fontSize: '11px',
+                            color: '#1e293b',
+                            backgroundColor: '#f1f5f9',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                          }}
+                        >
+                          {candidate.id}
+                        </span>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>
+                          {candidate.title}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: '#e0f2fe',
+                            color: '#0369a1',
+                          }}
+                        >
+                          {candidate.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                        {candidate.matchReason}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          padding: '2px 8px',
+                          borderRadius: '9999px',
+                          backgroundColor: candidate.score >= 0.8 ? '#fef2f2' : '#fefce8',
+                          color: candidate.score >= 0.8 ? '#b91c1c' : '#854d0e',
+                          border: `1px solid ${candidate.score >= 0.8 ? '#fecaca' : '#fef08a'}`,
+                        }}
+                      >
+                        {Math.round(candidate.score * 100)}% Match
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => window.open(`/incidents/${candidate.id}`, '_blank')}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          backgroundColor: '#eff6ff',
+                          color: '#1d4ed8',
+                          border: '1px solid #bfdbfe',
+                          borderRadius: '5px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        View Ticket ↗
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setDuplicatesDismissed(true)}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    backgroundColor: '#fef3c7',
+                    color: '#92400e',
+                    border: '1px solid #fde68a',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Continue Submitting Anyway
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Description */}
