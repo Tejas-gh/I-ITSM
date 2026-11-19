@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { incidentApi, referenceApi } from '../api/apiClient';
+import { incidentApi, referenceApi, escalationApi } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
@@ -20,6 +20,7 @@ export default function IncidentDetailPage() {
 
   const [incident, setIncident] = useState(null);
   const [technicians, setTechnicians] = useState([]);
+  const [escalations, setEscalations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -38,6 +39,9 @@ export default function IncidentDetailPage() {
       const data = await incidentApi.getIncident(id);
       setIncident(data);
 
+      const escList = await escalationApi.getIncidentEscalations(id).catch(() => []);
+      setEscalations(escList || []);
+
       if (ROLE_GROUPS.ADMINISTRATOR.includes(currentUser.role)) {
         const techList = await referenceApi.listTechnicians();
         setTechnicians(techList);
@@ -55,7 +59,10 @@ export default function IncidentDetailPage() {
       try {
         setLoading(true);
         setError(null);
-        const data = await incidentApi.getIncident(id);
+        const [data, escList] = await Promise.all([
+          incidentApi.getIncident(id),
+          escalationApi.getIncidentEscalations(id).catch(() => []),
+        ]);
         let techList = [];
 
         if (ROLE_GROUPS.ADMINISTRATOR.includes(currentUser.role)) {
@@ -64,6 +71,7 @@ export default function IncidentDetailPage() {
 
         if (!ignore) {
           setIncident(data);
+          setEscalations(escList || []);
           setTechnicians(techList);
         }
       } catch (err) {
@@ -325,6 +333,25 @@ export default function IncidentDetailPage() {
               <span style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a' }}>{incident.id}</span>
               <StatusBadge status={incident.status} />
               <PriorityBadge priority={incident.priority} score={incident.priorityScore} showScore />
+              {escalations.length > 0 && (
+                <span
+                  data-testid="escalation-badge"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    backgroundColor: '#fee2e2',
+                    color: '#dc2626',
+                    border: '1px solid #fca5a5',
+                  }}
+                >
+                  🔥 ESCALATED L{escalations[escalations.length - 1].level}
+                </span>
+              )}
             </div>
             <h1 style={{ fontSize: '22px', fontWeight: '800', color: '#0f172a', margin: '0 0 10px 0' }}>
               {incident.title}
@@ -350,6 +377,48 @@ export default function IncidentDetailPage() {
             <SlaBadge deadline={incident.resolutionDeadline} doneAt={incident.resolvedAt} label="Resolution SLA" />
           </div>
         </div>
+
+        {/* Escalation Alert Banner */}
+        {escalations.length > 0 && (
+          <div
+            data-testid="escalation-banner"
+            style={{
+              marginTop: '18px',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              backgroundColor: '#fef2f2',
+              border: '1px solid #f87171',
+              color: '#991b1b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '22px' }}>🔥</span>
+              <div>
+                <strong style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Automatic Escalation Triggered — Level {escalations[escalations.length - 1].level} ({escalations[escalations.length - 1].targetRole})
+                </strong>
+                <div style={{ fontSize: '12px', color: '#b91c1c', marginTop: '2px' }}>
+                  {escalations[escalations.length - 1].reason} • Escalated at {new Date(escalations[escalations.length - 1].escalatedAt).toLocaleTimeString()}
+                </div>
+              </div>
+            </div>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: '700',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                backgroundColor: '#dc2626',
+                color: '#fff',
+              }}
+            >
+              TIER {escalations[escalations.length - 1].level} ESCALATED
+            </span>
+          </div>
+        )}
 
         {/* Metadata Grid */}
         <div
@@ -586,13 +655,13 @@ export default function IncidentDetailPage() {
         )}
 
         {/* Notes Stream */}
-        {incident.notes.length === 0 ? (
+        {(incident.notes || []).length === 0 ? (
           <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
             No investigation notes or comments recorded yet.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {incident.notes.map((note, idx) => (
+            {(incident.notes || []).map((note, idx) => (
               <div
                 key={idx}
                 style={{

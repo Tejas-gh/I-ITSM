@@ -40,6 +40,14 @@ public class SlaMonitorConfig {
     public SlaMonitorService slaMonitorService(IncidentRepository incidentRepository,
                                                SlaAlertRepository slaAlertRepository,
                                                SlaIncidentProcessor slaIncidentProcessor,
+                                               org.springframework.beans.factory.ObjectProvider<com.iitsm.application.service.EscalationService> escalationServiceProvider,
+                                               Clock clock) {
+        return new SlaMonitorService(incidentRepository, slaAlertRepository, slaIncidentProcessor, escalationServiceProvider.getIfAvailable(), clock);
+    }
+
+    public SlaMonitorService slaMonitorService(IncidentRepository incidentRepository,
+                                               SlaAlertRepository slaAlertRepository,
+                                               SlaIncidentProcessor slaIncidentProcessor,
                                                Clock clock) {
         return new SlaMonitorService(incidentRepository, slaAlertRepository, slaIncidentProcessor, clock);
     }

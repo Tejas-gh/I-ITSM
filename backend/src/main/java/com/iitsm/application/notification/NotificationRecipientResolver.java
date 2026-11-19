@@ -3,6 +3,7 @@ package com.iitsm.application.notification;
 import com.iitsm.domain.event.DomainEvent;
 import com.iitsm.domain.event.IncidentAcknowledged;
 import com.iitsm.domain.event.IncidentAssigned;
+import com.iitsm.domain.event.IncidentEscalated;
 import com.iitsm.domain.exception.InvalidInputException;
 import com.iitsm.domain.model.Role;
 import com.iitsm.domain.incident.Incident;
@@ -80,6 +81,7 @@ public final class NotificationRecipientResolver {
                     allUsers, actorId,
                     u -> isAdmin(u) || isTechnician(u)
             );
+            case "INCIDENT_ESCALATED" -> resolveEscalationRecipients(event, allUsers);
             default -> List.of();
         };
     }
@@ -127,6 +129,19 @@ public final class NotificationRecipientResolver {
             }
         }
         return result;
+    }
+
+    private List<String> resolveEscalationRecipients(DomainEvent event, List<User> allUsers) {
+        Role targetRole = null;
+        if (event instanceof IncidentEscalated escalated) {
+            targetRole = escalated.targetRole();
+        }
+        final Role roleToNotify = targetRole;
+
+        return filterAndCollect(
+                allUsers, event.actorId(),
+                u -> isAdmin(u) || (roleToNotify != null && u.getRole() == roleToNotify)
+        );
     }
 
     private static boolean isAdmin(User u) {

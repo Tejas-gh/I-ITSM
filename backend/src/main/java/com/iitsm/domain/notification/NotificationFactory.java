@@ -63,6 +63,10 @@ public final class NotificationFactory {
                     "SLA Violated",
                     "Incident " + incidentId + " has breached its SLA."
             ));
+            case "INCIDENT_ESCALATED" -> Optional.of(new NotificationTemplate(
+                    "P1 Incident Escalated",
+                    "P1 Incident " + incidentId + " has been escalated due to unacknowledged response delay."
+            ));
             case "NOTE_ADDED",
                  "ADDITIONAL_INFO_ADDED",
                  "FEEDBACK_SUBMITTED",

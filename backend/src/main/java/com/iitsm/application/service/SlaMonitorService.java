@@ -29,6 +29,7 @@ public class SlaMonitorService {
     private final IncidentRepository incidents;
     private final SlaAlertRepository slaAlerts;
     private final SlaIncidentProcessor processor;
+    private final EscalationService escalationService;
     private final Clock clock;
 
     public SlaMonitorService(IncidentRepository incidents,
@@ -36,16 +37,25 @@ public class SlaMonitorService {
                              SlaEvaluator slaEvaluator,
                              DomainEventPublisher events,
                              Clock clock) {
-        this(incidents, slaAlerts, new SlaIncidentProcessor(slaAlerts, slaEvaluator, events), clock);
+        this(incidents, slaAlerts, new SlaIncidentProcessor(slaAlerts, slaEvaluator, events), null, clock);
     }
 
     public SlaMonitorService(IncidentRepository incidents,
                              SlaAlertRepository slaAlerts,
                              SlaIncidentProcessor processor,
                              Clock clock) {
+        this(incidents, slaAlerts, processor, null, clock);
+    }
+
+    public SlaMonitorService(IncidentRepository incidents,
+                             SlaAlertRepository slaAlerts,
+                             SlaIncidentProcessor processor,
+                             EscalationService escalationService,
+                             Clock clock) {
         this.incidents = Objects.requireNonNull(incidents, "incidents must not be null");
         this.slaAlerts = Objects.requireNonNull(slaAlerts, "slaAlerts must not be null");
         this.processor = Objects.requireNonNull(processor, "processor must not be null");
+        this.escalationService = escalationService;
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
@@ -84,6 +94,10 @@ public class SlaMonitorService {
                 IncidentSlaResult res = processor.processIncident(incident, now);
                 warnings += res.warningsRaised();
                 violations += res.violationsRaised();
+
+                if (escalationService != null) {
+                    escalationService.evaluateIncident(incident, now);
+                }
             } catch (Exception e) {
                 errors++;
                 log.warn("Failed to process SLA for incident {}: {}", incident.getId(), e.getMessage());

@@ -784,3 +784,32 @@ export const slaApi = {
     };
   },
 };
+
+/**
+ * Escalation API client (Gate B6).
+ */
+export const escalationApi = {
+  // GET /api/incidents/{id}/escalations
+  async getIncidentEscalations(incidentId) {
+    if (!USE_MOCK) {
+      return http(`/incidents/${encodeURIComponent(incidentId)}/escalations`);
+    }
+    return [];
+  },
+
+  // GET /api/escalations
+  async getAll() {
+    if (!USE_MOCK) {
+      return http('/escalations');
+    }
+    return [];
+  },
+
+  // POST /api/escalations/run (ADMIN only)
+  async run() {
+    if (!USE_MOCK) {
+      return http('/escalations/run', { method: 'POST' });
+    }
+    return [];
+  },
+};

@@ -124,6 +124,44 @@
     - `frontend/src/test/ActionModalRecommendations.test.jsx`: 2 tests verifying smart recommendation fetching, display of ranked cards with reasons and scores, and selection confirmation.
 - **Outcome:** Frontend test suite expanded to 43/43 tests passing (0 failures). Production build PASS. ESLint 0 errors, 0 warnings. Backend test suite remains 100% green at 766/766 tests passing. Gate B5 complete.
 
+## Session 12: Gate B6 — Automatic Escalation via Chain of Responsibility (2026-11-19)
+- **Task:** Implemented Gate B6 (Automatic escalation for unacknowledged P1 incidents using the Chain of Responsibility design pattern, escalation domain models, in-memory repository contract for Gate A7, domain event, notification dispatch, REST endpoints, and frontend escalation indicators).
+- **Files Created/Updated:**
+  - `com.iitsm.domain.escalation`:
+    - `EscalationLevel`: Enum defining tier levels 1, 2, 3 mapped to target roles (`TEAM_LEAD`, `ADMINISTRATOR`, `IT_MANAGER`).
+    - `EscalationRecord`: Domain record representing persistent escalation history.
+    - `EscalationRepository`: Frozen domain repository contract for Gate B6 and Developer A's Gate A7 persistence.
+    - `EscalationContext`: Context payload holding incident, response target duration, evaluation timestamp, and previously executed levels.
+    - `EscalationDecision`: Value object representing handler outcome.
+    - `EscalationHandler`: Chain of Responsibility handler interface.
+    - `AbstractEscalationHandler`: Chaining base implementation.
+    - `TeamLeadEscalationHandler`: Level 1 handler triggered at response deadline.
+    - `AdminEscalationHandler`: Level 2 handler triggered after +1 response target.
+    - `ItManagerEscalationHandler`: Level 3 handler triggered after +2 response targets.
+  - `com.iitsm.infrastructure.persistence.memory`:
+    - `InMemoryEscalationRepository`: Thread-safe memory repository adapter with atomic ID generation.
+  - `com.iitsm.domain.event`:
+    - `IncidentEscalated`: Domain event carrying action `INCIDENT_ESCALATED`, escalation level, and target role.
+  - `com.iitsm.application.service`:
+    - `EscalationService`: Coordinates the escalation chain, checks unacknowledged P1 eligibility, saves records, and publishes domain events.
+    - `SlaMonitorService`: Integrated optional `EscalationService` to automatically trigger escalations during background SLA monitor sweeps.
+  - `com.iitsm.config`:
+    - `EscalationConfig`: Spring configuration providing fallback `InMemoryEscalationRepository` and registering `EscalationService` and `EscalationController`.
+    - `SlaMonitorConfig`: Updated to inject `EscalationService` into `SlaMonitorService`.
+  - `com.iitsm.domain.notification`:
+    - `NotificationFactory`: Added `INCIDENT_ESCALATED` template.
+    - `NotificationRecipientResolver`: Resolves active administrators and target role holders (`TEAM_LEAD`, `IT_MANAGER`).
+  - `com.iitsm.api` & `dto`:
+    - `EscalationResponse`: DTO for escalation representation.
+    - `EscalationController`: REST controller exposing `GET /api/incidents/{id}/escalations`, `GET /api/escalations`, and `POST /api/escalations/run`.
+  - Frontend:
+    - `frontend/src/api/apiClient.js`: Added `escalationApi` (`getIncidentEscalations`, `getAll`, `run`).
+    - `frontend/src/pages/IncidentDetailPage.jsx`: Added escalation badge (`🔥 ESCALATED L1`) and alert banner with tier, target role, and reason.
+  - Tests:
+    - Backend: `EscalationChainTest`, `InMemoryEscalationRepositoryTest`, `IncidentEscalatedEventTest`, `EscalationServiceTest`, `EscalationNotificationTest`, `EscalationControllerTest`, `SlaMonitorEscalationIntegrationTest`.
+    - Frontend: `IncidentEscalationIndicator.test.jsx`.
+- **Outcome:** Backend test suite expanded to 792/792 tests passing (0 failures, 0 errors). Frontend test suite expanded to 45/45 tests passing (0 failures). Production build PASS. ESLint 0 warnings. B6 complete and unblocks Developer A for Gate A7.
+
 
 
 
