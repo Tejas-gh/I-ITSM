@@ -1,0 +1,177 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+
+const auth = vi.hoisted(() => ({ value: {} }));
+vi.mock('../context/AuthContext', () => ({ useAuth: () => auth.value }));
+vi.mock('../api/apiClient', () => ({
+  incidentApi: { listVisibleIncidents: vi.fn() },
+  referenceApi: { listServices: vi.fn() },
+  slaApi: { getAtRisk: vi.fn(), getViolations: vi.fn() },
+  dashboardApi: { getTechnicianWorkloads: vi.fn() },
+}));
+
+import { incidentApi, referenceApi, slaApi, dashboardApi } from '../api/apiClient';
+import DashboardPage from '../pages/DashboardPage';
+
+const FUTURE = '2099-01-01T00:00:00Z';
+const PAST = '2020-01-01T00:00:00Z';
+const incident = (over) => ({
+  id: 'INC1', title: 'Title', priority: 'P3', status: 'IN_PROGRESS', serviceId: 'SVC1',
+  resolutionDeadline: FUTURE, resolvedAt: null, notes: [], ...over,
+});
+
+const user = (role) => ({ id: 'U1', name: 'User One', role });
+const asRole = (role) => ({
+  currentUser: user(role),
+  isEmployee: role === 'EMPLOYEE',
+  isAdmin: role === 'ADMINISTRATOR' || role === 'IT_MANAGER',
+  isTechnician: role === 'TECHNICIAN' || role === 'TEAM_LEAD',
+});
+
+// Metric labels are <div>s; this keeps e.g. "Resolved" from also matching a status badge <span>
+const metric = (label) => screen.getByText(label, { selector: 'div' }).parentElement;
+const renderPage = () => render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  referenceApi.listServices.mockResolvedValue([{ id: 'SVC1', name: 'VPN' }]);
+  slaApi.getAtRisk.mockResolvedValue([]);
+  slaApi.getViolations.mockResolvedValue([]);
+  dashboardApi.getTechnicianWorkloads.mockResolvedValue([]);
+});
+
+describe('Employee dashboard', () => {
+  beforeEach(() => {
+    auth.value = asRole('EMPLOYEE');
+    incidentApi.listVisibleIncidents.mockResolvedValue([
+      incident({ id: 'A', status: 'IN_PROGRESS', resolutionDeadline: PAST }), // missed
+      incident({ id: 'B', status: 'WAITING_FOR_USER' }),
+      incident({ id: 'C', status: 'RESOLVED', resolvedAt: '2026-01-01T00:00:00Z' }),
+      incident({ id: 'D', status: 'CLOSED', resolvedAt: '2026-01-01T00:00:00Z' }),
+    ]);
+  });
+
+  it('shows personal metrics with the right values', async () => {
+    renderPage();
+
+    await screen.findByText('My Incidents');
+    expect(within(metric('My Incidents')).getByText('4')).toBeInTheDocument();
+    expect(within(metric('My Open Incidents')).getByText('2')).toBeInTheDocument();
+    expect(within(metric('My Resolved Incidents')).getByText('2')).toBeInTheDocument();
+    expect(within(metric('Awaiting My Response')).getByText('1')).toBeInTheDocument();
+    expect(within(metric('My SLA Missed')).getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('My Support Overview')).toBeInTheDocument();
+    expect(screen.getByText('My Recent Incidents')).toBeInTheDocument();
+  });
+
+  it('no longer shows the support-oriented tiles or the service distribution', async () => {
+    renderPage();
+    await screen.findByText('My Incidents');
+
+    ['Total Incidents', 'P1 Critical', '⚠️ SLA At-Risk', '🚨 SLA Violations', '📈 SLA Compliance',
+      'Service Incident Distribution', 'Technician Workload', 'Awaiting Acknowledgement']
+      .forEach((label) => expect(screen.queryByText(label)).not.toBeInTheDocument());
+  });
+
+  it('does not call the staff-only SLA or dashboard endpoints', async () => {
+    renderPage();
+    await screen.findByText('My Incidents');
+
+    expect(slaApi.getAtRisk).not.toHaveBeenCalled();
+    expect(slaApi.getViolations).not.toHaveBeenCalled();
+    expect(dashboardApi.getTechnicianWorkloads).not.toHaveBeenCalled();
+  });
+});
+
+describe('Technician dashboard', () => {
+  beforeEach(() => {
+    auth.value = asRole('TECHNICIAN');
+    incidentApi.listVisibleIncidents.mockResolvedValue([
+      incident({ id: 'A', status: 'ASSIGNED' }),
+      incident({ id: 'B', status: 'ASSIGNED' }),
+      incident({ id: 'C', status: 'IN_PROGRESS' }),
+    ]);
+    // The SLA endpoints return alerts for the whole system
+    slaApi.getAtRisk.mockResolvedValue([{ incidentId: 'A' }, { incidentId: 'OTHER1' }, { incidentId: 'OTHER2' }]);
+    slaApi.getViolations.mockResolvedValue([{ incidentId: 'C' }, { incidentId: 'OTHER3' }, { incidentId: 'OTHER4' }, { incidentId: 'OTHER5' }]);
+  });
+
+  it('counts only SLA alerts of the technician\'s own incidents', async () => {
+    renderPage();
+
+    await screen.findByText('⚠️ SLA At-Risk');
+    expect(within(metric('⚠️ SLA At-Risk')).getByText('1')).toBeInTheDocument();
+    expect(within(metric('🚨 SLA Violations')).getByText('1')).toBeInTheDocument();
+    // 1 of 3 own incidents violated -> 67 %, not clamped to 0 % by system-wide alerts
+    expect(within(metric('📈 SLA Compliance')).getByText('67%')).toBeInTheDocument();
+  });
+
+  it('shows how many incidents await acknowledgement', async () => {
+    renderPage();
+
+    await screen.findByText('Awaiting Acknowledgement');
+    expect(within(metric('Awaiting Acknowledgement')).getByText('2')).toBeInTheDocument();
+  });
+
+  it('keeps the SLA tiles clickable and shows no workload panel or admin-only card', async () => {
+    renderPage();
+    await screen.findByText('⚠️ SLA At-Risk');
+
+    expect(metric('⚠️ SLA At-Risk').closest('a')).toHaveAttribute('href', '/sla');
+    expect(screen.queryByTestId('technician-workload')).not.toBeInTheDocument();
+    expect(screen.queryByText('Resolved', { selector: 'div' })).not.toBeInTheDocument();
+    expect(dashboardApi.getTechnicianWorkloads).not.toHaveBeenCalled();
+  });
+});
+
+describe('Administrator dashboard', () => {
+  beforeEach(() => {
+    auth.value = asRole('ADMINISTRATOR');
+    incidentApi.listVisibleIncidents.mockResolvedValue([
+      incident({ id: 'A', status: 'ASSIGNED' }),
+      incident({ id: 'B', status: 'RESOLVED', resolvedAt: '2026-01-01T00:00:00Z' }),
+      incident({ id: 'C', status: 'CLOSED', resolvedAt: '2026-01-01T00:00:00Z' }),
+    ]);
+    slaApi.getViolations.mockResolvedValue([{ incidentId: 'A' }, { incidentId: 'Z' }]);
+  });
+
+  it('shows the resolved count and uses all SLA alerts system-wide', async () => {
+    renderPage();
+
+    await screen.findByText('Resolved', { selector: 'div' });
+    expect(within(metric('Resolved')).getByText('2')).toBeInTheDocument();
+    expect(within(metric('🚨 SLA Violations')).getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText('Awaiting Acknowledgement')).not.toBeInTheDocument();
+  });
+
+  it('shows technician workload from the dashboard endpoint', async () => {
+    dashboardApi.getTechnicianWorkloads.mockResolvedValue([
+      { technicianId: 'T1', technicianName: 'Alex', activeIncidents: 4, maxActiveIncidents: 5, capacityUtilization: 0.8 },
+      { technicianId: 'T2', technicianName: 'Sam', activeIncidents: 0, maxActiveIncidents: 4, capacityUtilization: 0 },
+    ]);
+    renderPage();
+
+    const rows = await screen.findAllByTestId('workload-row');
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByText('Alex')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('4/5')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('0/4')).toBeInTheDocument();
+    expect(screen.getByText('Service Incident Distribution')).toBeInTheDocument();
+  });
+
+  it('shows an empty workload state and still renders when the workload endpoint fails', async () => {
+    dashboardApi.getTechnicianWorkloads.mockRejectedValue(new Error('boom'));
+    renderPage();
+
+    expect(await screen.findByText('No technicians found.')).toBeInTheDocument();
+    expect(screen.getByText('ITSM Service Desk Overview')).toBeInTheDocument();
+  });
+
+  it('keeps the SLA tiles clickable', async () => {
+    renderPage();
+    await screen.findByText('🚨 SLA Violations');
+
+    expect(metric('🚨 SLA Violations').closest('a')).toHaveAttribute('href', '/sla');
+  });
+});

@@ -1,35 +1,43 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { incidentApi, referenceApi, slaApi } from '../api/apiClient';
+import { incidentApi, referenceApi, slaApi, dashboardApi } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import SlaBadge from '../components/SlaBadge';
+import TechnicianWorkloadPanel from '../components/TechnicianWorkloadPanel';
+import { employeeMetrics, isResolved, scopeAlertsToIncidents } from './dashboardMetrics';
 import { INCIDENT_STATUS, PRIORITY_LEVEL } from '../constants/itsmConstants';
 
 export default function DashboardPage() {
-  const { currentUser, isEmployee } = useAuth();
+  const { currentUser, isEmployee, isAdmin } = useAuth();
   const slaClickable = !isEmployee;
   const [incidents, setIncidents] = useState([]);
   const [services, setServices] = useState([]);
   const [atRiskAlerts, setAtRiskAlerts] = useState([]);
   const [violationAlerts, setViolationAlerts] = useState([]);
+  const [workloads, setWorkloads] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
-        const [incList, srvList, atRiskList, violList] = await Promise.all([
+        // Employees have no access to the staff-only SLA/dashboard endpoints; only administrators see workloads
+        const [incList, srvList, atRiskList, violList, workloadList] = await Promise.all([
           incidentApi.listVisibleIncidents(currentUser),
           referenceApi.listServices(),
-          slaApi.getAtRisk().catch(() => []),
-          slaApi.getViolations().catch(() => []),
+          isEmployee ? [] : slaApi.getAtRisk().catch(() => []),
+          isEmployee ? [] : slaApi.getViolations().catch(() => []),
+          isAdmin ? dashboardApi.getTechnicianWorkloads().catch(() => []) : [],
         ]);
-        setIncidents(incList || []);
+        const visible = incList || [];
+        setIncidents(visible);
         setServices(srvList || []);
-        setAtRiskAlerts(atRiskList || []);
-        setViolationAlerts(violList || []);
+        // The SLA endpoints are not role-scoped: non-admins only count alerts of their own incidents
+        setAtRiskAlerts(isAdmin ? atRiskList || [] : scopeAlertsToIncidents(atRiskList, visible));
+        setViolationAlerts(isAdmin ? violList || [] : scopeAlertsToIncidents(violList, visible));
+        setWorkloads(workloadList || []);
       } catch (err) {
         console.error('Failed to load dashboard data', err);
       } finally {
@@ -37,7 +45,7 @@ export default function DashboardPage() {
       }
     }
     loadData();
-  }, [currentUser]);
+  }, [currentUser, isEmployee, isAdmin]);
 
   if (loading) {
     return (
@@ -53,6 +61,9 @@ export default function DashboardPage() {
     (i) => i.status !== INCIDENT_STATUS.RESOLVED && i.status !== INCIDENT_STATUS.VERIFIED && i.status !== INCIDENT_STATUS.CLOSED
   ).length;
   const criticalCount = incidents.filter((i) => i.priority === PRIORITY_LEVEL.P1).length;
+  const resolvedCount = incidents.filter(isResolved).length;
+  const awaitingAckCount = incidents.filter((i) => i.status === INCIDENT_STATUS.ASSIGNED).length;
+  const mine = employeeMetrics(incidents);
 
   const now = new Date();
   const calculatedBreaches = incidents.filter((i) => {
@@ -76,7 +87,7 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
         <div>
           <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#0f172a', margin: '0 0 6px 0' }}>
-            ITSM Service Desk Overview
+            {isEmployee ? 'My Support Overview' : 'ITSM Service Desk Overview'}
           </h1>
           <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
             Viewing perspective for <strong style={{ color: '#0f172a' }}>{currentUser.name}</strong> ({currentUser.role})
@@ -111,51 +122,111 @@ export default function DashboardPage() {
           marginBottom: '32px',
         }}
       >
-        <div style={cardStyle}>
-          <div style={metricLabelStyle}>Total Incidents</div>
-          <div style={{ ...metricValueStyle, color: '#0f172a' }}>{total}</div>
-          <div style={metricSubStyle}>Visible in role scope</div>
-        </div>
+        {isEmployee ? (
+          <>
+            <div style={cardStyle}>
+              <div style={metricLabelStyle}>My Incidents</div>
+              <div style={{ ...metricValueStyle, color: '#0f172a' }}>{mine.total}</div>
+              <div style={metricSubStyle}>Reported by me</div>
+            </div>
 
-        <div style={cardStyle}>
-          <div style={metricLabelStyle}>Open & Active</div>
-          <div style={{ ...metricValueStyle, color: '#2563eb' }}>{openCount}</div>
-          <div style={metricSubStyle}>Require resolution</div>
-        </div>
+            <div style={cardStyle}>
+              <div style={metricLabelStyle}>My Open Incidents</div>
+              <div style={{ ...metricValueStyle, color: '#2563eb' }}>{mine.open}</div>
+              <div style={metricSubStyle}>Still being worked on</div>
+            </div>
 
-        <div style={cardStyle}>
-          <div style={metricLabelStyle}>P1 Critical</div>
-          <div style={{ ...metricValueStyle, color: '#dc2626' }}>{criticalCount}</div>
-          <div style={metricSubStyle}>Immediate escalation</div>
-        </div>
+            <div style={cardStyle}>
+              <div style={metricLabelStyle}>My Resolved Incidents</div>
+              <div style={{ ...metricValueStyle, color: '#16a34a' }}>{mine.resolved}</div>
+              <div style={metricSubStyle}>Resolved, verified or closed</div>
+            </div>
 
-        <SlaCard to="/sla" clickable={slaClickable}>
-          <div style={metricLabelStyle}>⚠️ SLA At-Risk</div>
-          <div style={{ ...metricValueStyle, color: totalAtRisk > 0 ? '#d97706' : '#16a34a' }}>
-            {totalAtRisk}
-          </div>
-          <div style={metricSubStyle}>Within 20% deadline threshold{slaClickable ? ' →' : ''}</div>
-        </SlaCard>
+            <div style={cardStyle}>
+              <div style={metricLabelStyle}>Awaiting My Response</div>
+              <div style={{ ...metricValueStyle, color: mine.awaitingResponse > 0 ? '#d97706' : '#16a34a' }}>
+                {mine.awaitingResponse}
+              </div>
+              <div style={metricSubStyle}>Technician needs information</div>
+            </div>
 
-        <SlaCard to="/sla" clickable={slaClickable}>
-          <div style={metricLabelStyle}>🚨 SLA Violations</div>
-          <div style={{ ...metricValueStyle, color: totalViolations > 0 ? '#dc2626' : '#16a34a' }}>
-            {totalViolations}
-          </div>
-          <div style={metricSubStyle}>Breached SLA policies{slaClickable ? ' →' : ''}</div>
-        </SlaCard>
+            <div style={cardStyle}>
+              <div style={metricLabelStyle}>My SLA Missed</div>
+              <div style={{ ...metricValueStyle, color: mine.slaMissed > 0 ? '#dc2626' : '#16a34a' }}>
+                {mine.slaMissed}
+              </div>
+              <div style={metricSubStyle}>Resolution target missed</div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={cardStyle}>
+              <div style={metricLabelStyle}>Total Incidents</div>
+              <div style={{ ...metricValueStyle, color: '#0f172a' }}>{total}</div>
+              <div style={metricSubStyle}>Visible in role scope</div>
+            </div>
 
-        <SlaCard to="/sla" clickable={slaClickable}>
-          <div style={metricLabelStyle}>📈 SLA Compliance</div>
-          <div style={{ ...metricValueStyle, color: complianceRate >= 90 ? '#16a34a' : complianceRate >= 70 ? '#d97706' : '#dc2626' }}>
-            {complianceRate}%
-          </div>
-          <div style={metricSubStyle}>Target ≥ 95%{slaClickable ? ' →' : ''}</div>
-        </SlaCard>
+            <div style={cardStyle}>
+              <div style={metricLabelStyle}>Open & Active</div>
+              <div style={{ ...metricValueStyle, color: '#2563eb' }}>{openCount}</div>
+              <div style={metricSubStyle}>Require resolution</div>
+            </div>
+
+            <div style={cardStyle}>
+              <div style={metricLabelStyle}>P1 Critical</div>
+              <div style={{ ...metricValueStyle, color: '#dc2626' }}>{criticalCount}</div>
+              <div style={metricSubStyle}>Immediate escalation</div>
+            </div>
+
+            {isAdmin && (
+              <div style={cardStyle}>
+                <div style={metricLabelStyle}>Resolved</div>
+                <div style={{ ...metricValueStyle, color: '#16a34a' }}>{resolvedCount}</div>
+                <div style={metricSubStyle}>Resolved, verified or closed</div>
+              </div>
+            )}
+
+            {!isAdmin && (
+              <div style={cardStyle}>
+                <div style={metricLabelStyle}>Awaiting Acknowledgement</div>
+                <div style={{ ...metricValueStyle, color: awaitingAckCount > 0 ? '#d97706' : '#16a34a' }}>
+                  {awaitingAckCount}
+                </div>
+                <div style={metricSubStyle}>Acknowledge to meet response SLA</div>
+              </div>
+            )}
+
+            <SlaCard to="/sla" clickable={slaClickable}>
+              <div style={metricLabelStyle}>⚠️ SLA At-Risk</div>
+              <div style={{ ...metricValueStyle, color: totalAtRisk > 0 ? '#d97706' : '#16a34a' }}>
+                {totalAtRisk}
+              </div>
+              <div style={metricSubStyle}>Within 20% deadline threshold{slaClickable ? ' →' : ''}</div>
+            </SlaCard>
+
+            <SlaCard to="/sla" clickable={slaClickable}>
+              <div style={metricLabelStyle}>🚨 SLA Violations</div>
+              <div style={{ ...metricValueStyle, color: totalViolations > 0 ? '#dc2626' : '#16a34a' }}>
+                {totalViolations}
+              </div>
+              <div style={metricSubStyle}>Breached SLA policies{slaClickable ? ' →' : ''}</div>
+            </SlaCard>
+
+            <SlaCard to="/sla" clickable={slaClickable}>
+              <div style={metricLabelStyle}>📈 SLA Compliance</div>
+              <div style={{ ...metricValueStyle, color: complianceRate >= 90 ? '#16a34a' : complianceRate >= 70 ? '#d97706' : '#dc2626' }}>
+                {complianceRate}%
+              </div>
+              <div style={metricSubStyle}>Target ≥ 95%{slaClickable ? ' →' : ''}</div>
+            </SlaCard>
+          </>
+        )}
       </div>
 
       {/* Two columns: Service breakdown & Recent Incidents */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isEmployee ? '1fr' : '1fr 2fr', gap: '24px' }}>
+        {!isEmployee && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         {/* Service Analysis */}
         <div style={{ ...cardStyle, height: 'fit-content' }}>
           <h2 style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a', margin: '0 0 16px 0' }}>
@@ -187,11 +258,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {isAdmin && <TechnicianWorkloadPanel workloads={workloads} />}
+          </div>
+        )}
+
         {/* Recent Incidents Table */}
         <div style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
-              Recent Incidents
+              {isEmployee ? 'My Recent Incidents' : 'Recent Incidents'}
             </h2>
             <Link to="/incidents" style={{ fontSize: '13px', fontWeight: '600', color: '#2563eb', textDecoration: 'none' }}>
               View all incidents →

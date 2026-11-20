@@ -1035,6 +1035,30 @@ export const slaApi = {
 };
 
 /**
+ * Dashboard API client. The backend restricts these endpoints to administrators.
+ */
+export const dashboardApi = {
+  // GET /api/dashboard/technicians -> [{ technicianId, technicianName, activeIncidents, maxActiveIncidents, capacityUtilization }]
+  async getTechnicianWorkloads() {
+    if (!USE_MOCK) {
+      return http('/dashboard/technicians');
+    }
+    const workload = ['ASSIGNED', 'ACKNOWLEDGED', 'IN_PROGRESS', 'WAITING_FOR_USER'];
+    const incidents = getStoredIncidents();
+    return INITIAL_USERS.filter((u) => u.role === 'TECHNICIAN' || u.role === 'TEAM_LEAD').map((u) => {
+      const active = incidents.filter((i) => i.assignedTechnicianId === u.id && workload.includes(i.status)).length;
+      return {
+        technicianId: u.id,
+        technicianName: u.name,
+        activeIncidents: active,
+        maxActiveIncidents: u.maxActiveIncidents,
+        capacityUtilization: u.maxActiveIncidents > 0 ? active / u.maxActiveIncidents : 0,
+      };
+    });
+  },
+};
+
+/**
  * Escalation API client (Gate B6).
  */
 export const escalationApi = {
