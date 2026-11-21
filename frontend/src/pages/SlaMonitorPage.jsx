@@ -14,6 +14,7 @@ export default function SlaMonitorPage() {
   const [warnings, setWarnings] = useState([]);
   const [violations, setViolations] = useState([]);
   const [openIncidents, setOpenIncidents] = useState([]);
+  const [allIncidents, setAllIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState(null);
@@ -30,6 +31,7 @@ export default function SlaMonitorPage() {
       setWarnings(warns || []);
       setViolations(viols || []);
       setOpenIncidents((incs || []).filter((i) => i.status !== INCIDENT_STATUS.CLOSED));
+      setAllIncidents(incs || []);
     } catch (err) {
       console.error('Failed loading SLA monitor data', err);
     } finally {
@@ -50,6 +52,7 @@ export default function SlaMonitorPage() {
           setWarnings(warns || []);
           setViolations(viols || []);
           setOpenIncidents((incs || []).filter((i) => i.status !== INCIDENT_STATUS.CLOSED));
+          setAllIncidents(incs || []);
         }
       } catch (err) {
         console.error('Failed loading SLA monitor data', err);
@@ -79,28 +82,164 @@ export default function SlaMonitorPage() {
     }
   };
 
+  // Every visible incident (including resolved/closed), so a recorded breach can be matched to its incident's status
   const incidentMap = {};
-  openIncidents.forEach((i) => {
+  allIncidents.forEach((i) => {
     incidentMap[i.id] = i;
   });
+  // A breach is "active" while its incident is still open. Resolved/verified/closed incidents (and incidents that are not
+  // visible to this user) keep their recorded breach as history: it still counts towards the compliance rate below.
+  const isIncidentOpen = (incidentId) => {
+    const inc = incidentMap[incidentId];
+    return !!inc && ![INCIDENT_STATUS.RESOLVED, INCIDENT_STATUS.VERIFIED, INCIDENT_STATUS.CLOSED].includes(inc.status);
+  };
 
   const totalOpen = openIncidents.length;
-  const violationCount = violations.length;
-  const warningCount = warnings.length;
+  const violationCount = violations.length; // all recorded breaches (history included): drives the compliance rate
+  const activeViolationCount = violations.filter((v) => isIncidentOpen(v.incidentId)).length;
+  const warningCount = warnings.length; // all recorded warnings (history included)
+  const activeWarningCount = warnings.filter((w) => isIncidentOpen(w.incidentId)).length;
   const complianceRate = totalOpen > 0 ? Math.max(0, ((totalOpen - violationCount) / totalOpen) * 100).toFixed(1) : '100.0';
 
   const filteredWarnings = warnings.filter((w) =>
     filterIncidentId ? w.incidentId?.toLowerCase().includes(filterIncidentId.toLowerCase()) : true
   );
+  const activeWarnings = filteredWarnings.filter((w) => isIncidentOpen(w.incidentId));
+  const historicalWarnings = filteredWarnings.filter((w) => !isIncidentOpen(w.incidentId));
 
   const filteredViolations = violations.filter((v) =>
     filterIncidentId ? v.incidentId?.toLowerCase().includes(filterIncidentId.toLowerCase()) : true
   );
+  const activeViolations = filteredViolations.filter((v) => isIncidentOpen(v.incidentId));
+  const historicalViolations = filteredViolations.filter((v) => !isIncidentOpen(v.incidentId));
 
   const filteredOpen = openIncidents.filter((i) =>
     filterIncidentId ? i.id?.toLowerCase().includes(filterIncidentId.toLowerCase()) : true
   );
 
+
+
+  // One table of recorded warnings. Active ones are highlighted; historical ones are shown muted.
+  const renderWarningRows = (list, active) => (
+    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+      <thead>
+        <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+          <th style={thStyle}>Incident ID</th>
+          <th style={thStyle}>Title</th>
+          <th style={thStyle}>Incident Status</th>
+          <th style={thStyle}>SLA Dimension</th>
+          <th style={thStyle}>Alert Kind</th>
+          <th style={thStyle}>Target Deadline</th>
+          <th style={thStyle}>Warning Raised At</th>
+          <th style={thStyle}>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {list.map((item) => (
+          <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9', opacity: active ? 1 : 0.8 }}>
+            <td style={tdStyle}>
+              <Link to={`/incidents/${item.incidentId}`} style={{ fontWeight: '700', color: '#2563eb', textDecoration: 'none' }}>
+                {item.incidentId}
+              </Link>
+            </td>
+            <td style={{ ...tdStyle, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {incidentMap[item.incidentId]?.title || '—'}
+            </td>
+            <td style={tdStyle}>
+              {incidentMap[item.incidentId] ? <StatusBadge status={incidentMap[item.incidentId].status} size="small" /> : '—'}
+            </td>
+            <td style={tdStyle}>
+              <span style={badgeStyle('#fef3c7', '#b45309')}>{item.slaType} SLA</span>
+            </td>
+            <td style={tdStyle}>
+              <span style={active ? badgeStyle('#fffbeb', '#d97706') : badgeStyle('#f1f5f9', '#475569')}>
+                {active ? '⚠️' : '🗂️'} {item.kind}
+              </span>
+            </td>
+            <td style={tdStyle}>{new Date(item.deadline).toLocaleString()}</td>
+            <td style={tdStyle}>{new Date(item.raisedAt).toLocaleString()}</td>
+            <td style={tdStyle}>
+              <Link
+                to={`/incidents/${item.incidentId}`}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  backgroundColor: active ? '#2563eb' : '#e2e8f0',
+                  color: active ? '#fff' : '#334155',
+                  textDecoration: 'none',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                }}
+              >
+                View Incident →
+              </Link>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+
+  // One table of recorded breaches. Active ones are highlighted; historical ones are shown muted.
+  const renderViolationRows = (list, active) => (
+    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+      <thead>
+        <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+          <th style={thStyle}>Incident ID</th>
+          <th style={thStyle}>Title</th>
+          <th style={thStyle}>Incident Status</th>
+          <th style={thStyle}>SLA Dimension</th>
+          <th style={thStyle}>Alert Kind</th>
+          <th style={thStyle}>Target Deadline</th>
+          <th style={thStyle}>Breached At</th>
+          <th style={thStyle}>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {list.map((item) => (
+          <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9', opacity: active ? 1 : 0.8 }}>
+            <td style={tdStyle}>
+              <Link to={`/incidents/${item.incidentId}`} style={{ fontWeight: '700', color: '#2563eb', textDecoration: 'none' }}>
+                {item.incidentId}
+              </Link>
+            </td>
+            <td style={{ ...tdStyle, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {incidentMap[item.incidentId]?.title || '—'}
+            </td>
+            <td style={tdStyle}>
+              {incidentMap[item.incidentId] ? <StatusBadge status={incidentMap[item.incidentId].status} size="small" /> : '—'}
+            </td>
+            <td style={tdStyle}>
+              <span style={badgeStyle('#fee2e2', '#b91c1c')}>{item.slaType} SLA</span>
+            </td>
+            <td style={tdStyle}>
+              <span style={active ? badgeStyle('#fef2f2', '#dc2626') : badgeStyle('#f1f5f9', '#475569')}>
+                {active ? '🚨' : '🗂️'} {item.kind}
+              </span>
+            </td>
+            <td style={tdStyle}>{new Date(item.deadline).toLocaleString()}</td>
+            <td style={tdStyle}>{new Date(item.raisedAt).toLocaleString()}</td>
+            <td style={tdStyle}>
+              <Link
+                to={`/incidents/${item.incidentId}`}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  backgroundColor: active ? '#dc2626' : '#e2e8f0',
+                  color: active ? '#fff' : '#334155',
+                  textDecoration: 'none',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                }}
+              >
+                View Incident →
+              </Link>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
       {/* Page Header */}
@@ -200,20 +339,24 @@ export default function SlaMonitorPage() {
           <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>
             At-Risk Incidents (≤ 20% SLA)
           </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: warningCount > 0 ? '#d97706' : '#0f172a' }}>
-            {warningCount}
+          <div style={{ fontSize: '28px', fontWeight: '800', color: activeWarningCount > 0 ? '#d97706' : '#0f172a' }}>
+            {activeWarningCount}
           </div>
-          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>Active warning alerts</div>
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+            Open incidents near their deadline · {warningCount} recorded in total
+          </div>
         </div>
 
         <div style={kpiCardStyle}>
           <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>
             SLA Breach Violations
           </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: violationCount > 0 ? '#dc2626' : '#0f172a' }}>
-            {violationCount}
+          <div style={{ fontSize: '28px', fontWeight: '800', color: activeViolationCount > 0 ? '#dc2626' : '#0f172a' }}>
+            {activeViolationCount}
           </div>
-          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>Target deadlines exceeded</div>
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+            Open incidents in breach · {violationCount} recorded in total
+          </div>
         </div>
 
         <div style={kpiCardStyle}>
@@ -257,13 +400,13 @@ export default function SlaMonitorPage() {
               onClick={() => setActiveTab('at-risk')}
               style={tabBtnStyle(activeTab === 'at-risk')}
             >
-              ⚠️ At-Risk ({warningCount})
+              ⚠️ At-Risk ({activeWarningCount})
             </button>
             <button
               onClick={() => setActiveTab('violations')}
               style={tabBtnStyle(activeTab === 'violations')}
             >
-              🚨 Violations ({violationCount})
+              🚨 Violations ({activeViolationCount})
             </button>
             <button
               onClick={() => setActiveTab('all')}
@@ -291,7 +434,7 @@ export default function SlaMonitorPage() {
           </div>
         </div>
 
-        {/* Tab 1: At-Risk Warnings Table */}
+        {/* Tab 1: At-Risk Warnings (active vs. historical) */}
         {activeTab === 'at-risk' && (
           <div>
             {filteredWarnings.length === 0 ? (
@@ -299,66 +442,36 @@ export default function SlaMonitorPage() {
                 🎉 No active SLA warnings! All incidents are well within targets.
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
-                    <th style={thStyle}>Incident ID</th>
-                    <th style={thStyle}>Title</th>
-                    <th style={thStyle}>SLA Dimension</th>
-                    <th style={thStyle}>Alert Kind</th>
-                    <th style={thStyle}>Target Deadline</th>
-                    <th style={thStyle}>Warning Raised At</th>
-                    <th style={thStyle}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredWarnings.map((item) => (
-                    <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={tdStyle}>
-                        <Link to={`/incidents/${item.incidentId}`} style={{ fontWeight: '700', color: '#2563eb', textDecoration: 'none' }}>
-                          {item.incidentId}
-                        </Link>
-                      </td>
-                      <td style={{ ...tdStyle, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {incidentMap[item.incidentId]?.title || '—'}
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={badgeStyle('#fef3c7', '#b45309')}>
-                          {item.slaType} SLA
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={badgeStyle('#fffbeb', '#d97706')}>
-                          ⚠️ {item.kind}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>{new Date(item.deadline).toLocaleString()}</td>
-                      <td style={tdStyle}>{new Date(item.raisedAt).toLocaleString()}</td>
-                      <td style={tdStyle}>
-                        <Link
-                          to={`/incidents/${item.incidentId}`}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '4px',
-                            backgroundColor: '#2563eb',
-                            color: '#fff',
-                            textDecoration: 'none',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                          }}
-                        >
-                          View Incident →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <div style={violationSectionHeadStyle}>
+                  <strong>Active at-risk ({activeWarnings.length})</strong>
+                  <span style={{ color: '#64748b' }}> · the incident is still open</span>
+                </div>
+                {activeWarnings.length === 0 ? (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#16a34a', fontSize: '14px' }}>
+                    ✓ No open incident is currently at risk.
+                  </div>
+                ) : (
+                  renderWarningRows(activeWarnings, true)
+                )}
+
+                {historicalWarnings.length > 0 && (
+                  <>
+                    <div style={{ ...violationSectionHeadStyle, borderTop: '1px solid #e2e8f0' }}>
+                      <strong>Historical warnings ({historicalWarnings.length})</strong>
+                      <span style={{ color: '#64748b' }}>
+                        {' '}· recorded for audit; the incident is resolved or closed (or not visible to you).
+                      </span>
+                    </div>
+                    {renderWarningRows(historicalWarnings, false)}
+                  </>
+                )}
+              </>
             )}
           </div>
         )}
 
-        {/* Tab 2: Breach Violations Table */}
+        {/* Tab 2: Breach Violations (active vs. historical) */}
         {activeTab === 'violations' && (
           <div>
             {filteredViolations.length === 0 ? (
@@ -366,61 +479,31 @@ export default function SlaMonitorPage() {
                 ✓ Zero recorded SLA breaches. Excellent compliance!
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
-                    <th style={thStyle}>Incident ID</th>
-                    <th style={thStyle}>Title</th>
-                    <th style={thStyle}>SLA Dimension</th>
-                    <th style={thStyle}>Alert Kind</th>
-                    <th style={thStyle}>Target Deadline</th>
-                    <th style={thStyle}>Breached At</th>
-                    <th style={thStyle}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredViolations.map((item) => (
-                    <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={tdStyle}>
-                        <Link to={`/incidents/${item.incidentId}`} style={{ fontWeight: '700', color: '#2563eb', textDecoration: 'none' }}>
-                          {item.incidentId}
-                        </Link>
-                      </td>
-                      <td style={{ ...tdStyle, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {incidentMap[item.incidentId]?.title || '—'}
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={badgeStyle('#fee2e2', '#b91c1c')}>
-                          {item.slaType} SLA
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={badgeStyle('#fef2f2', '#dc2626')}>
-                          🚨 {item.kind}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>{new Date(item.deadline).toLocaleString()}</td>
-                      <td style={tdStyle}>{new Date(item.raisedAt).toLocaleString()}</td>
-                      <td style={tdStyle}>
-                        <Link
-                          to={`/incidents/${item.incidentId}`}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '4px',
-                            backgroundColor: '#dc2626',
-                            color: '#fff',
-                            textDecoration: 'none',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                          }}
-                        >
-                          Remediate →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <div style={violationSectionHeadStyle}>
+                  <strong>Active violations ({activeViolations.length})</strong>
+                  <span style={{ color: '#64748b' }}> · the incident is still open</span>
+                </div>
+                {activeViolations.length === 0 ? (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#16a34a', fontSize: '14px' }}>
+                    ✓ No open incident is currently in breach.
+                  </div>
+                ) : (
+                  renderViolationRows(activeViolations, true)
+                )}
+
+                {historicalViolations.length > 0 && (
+                  <>
+                    <div style={{ ...violationSectionHeadStyle, borderTop: '1px solid #e2e8f0' }}>
+                      <strong>Historical breaches ({historicalViolations.length})</strong>
+                      <span style={{ color: '#64748b' }}>
+                        {' '}· recorded for audit; the incident is resolved or closed (or not visible to you). They still count in the compliance rate.
+                      </span>
+                    </div>
+                    {renderViolationRows(historicalViolations, false)}
+                  </>
+                )}
+              </>
             )}
           </div>
         )}
@@ -522,3 +605,11 @@ const badgeStyle = (bg, color) => ({
   backgroundColor: bg,
   color,
 });
+
+const violationSectionHeadStyle = {
+  padding: '14px 16px',
+  fontSize: '13px',
+  color: '#0f172a',
+  backgroundColor: '#f8fafc',
+  borderBottom: '1px solid #e2e8f0',
+};

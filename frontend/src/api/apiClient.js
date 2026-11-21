@@ -11,6 +11,7 @@ import {
   NOTE_TYPE,
   CATEGORY_SOURCE,
 } from '../constants/itsmConstants';
+import { REJECTION_REMARK_PREFIX } from '../components/noteLabel';
 
 // Mock mode is opt-in: set VITE_USE_MOCKS=true (see .env.example). The default is the real backend.
 export const USE_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -615,9 +616,17 @@ export const incidentApi = {
   },
 
   // POST /api/incidents/{id}/reject-resolution
-  async rejectResolution(id) {
+  // The optional remark is saved through the existing additional-info endpoint right after the rejection.
+  async rejectResolution(id, remark = '') {
+    const remarkText = (remark || '').trim();
     if (!USE_MOCK) {
-      return http(`/incidents/${id}/reject-resolution`, { method: 'POST' });
+      const reopened = await http(`/incidents/${id}/reject-resolution`, { method: 'POST' });
+      if (!remarkText) return reopened;
+      try {
+        return await this.addAdditionalInfo(id, REJECTION_REMARK_PREFIX + remarkText);
+      } catch (err) {
+        throw new Error(`The resolution was rejected, but the remark could not be saved: ${err.message}`, { cause: err });
+      }
     }
 
     return this._updateIncident(id, (inc) => {
@@ -633,6 +642,14 @@ export const incidentApi = {
           text: 'RESOLUTION_REJECTED: the reporter rejected the proposed resolution and the incident was reopened.',
           createdAt: new Date().toISOString(),
         },
+        ...(remarkText
+          ? [{
+              authorId: inc.reporterId,
+              type: 'ADDITIONAL_INFO',
+              text: REJECTION_REMARK_PREFIX + remarkText,
+              createdAt: new Date().toISOString(),
+            }]
+          : []),
       ];
     });
   },

@@ -141,8 +141,58 @@ describe('Administrator dashboard', () => {
 
     await screen.findByText('Resolved', { selector: 'div' });
     expect(within(metric('Resolved')).getByText('2')).toBeInTheDocument();
-    expect(within(metric('🚨 SLA Violations')).getByText('2')).toBeInTheDocument();
+    // 2 violations are recorded (A, Z) but only A belongs to an open incident
+    expect(within(metric('🚨 SLA Violations')).getByText('1')).toBeInTheDocument();
+    expect(screen.getByText(/Open incidents in breach · 2 recorded/)).toBeInTheDocument();
     expect(screen.queryByText('Awaiting Acknowledgement')).not.toBeInTheDocument();
+  });
+
+  it('keeps a breach on a resolved incident in the compliance rate but not in the active violations', async () => {
+    incidentApi.listVisibleIncidents.mockResolvedValue([
+      incident({ id: 'A', status: 'IN_PROGRESS' }),
+      incident({ id: 'B', status: 'RESOLVED', resolvedAt: '2026-01-01T00:00:00Z' }),
+    ]);
+    slaApi.getViolations.mockResolvedValue([{ incidentId: 'B' }]); // recorded, but B is resolved now
+    renderPage();
+
+    await screen.findByText('🚨 SLA Violations');
+    expect(within(metric('🚨 SLA Violations')).getByText('0')).toBeInTheDocument();
+    expect(screen.getByText(/Open incidents in breach · 1 recorded/)).toBeInTheDocument();
+    expect(within(metric('📈 SLA Compliance')).getByText('50%')).toBeInTheDocument(); // 1 of 2 breached
+    expect(screen.getByText('All SLAs are healthy')).toBeInTheDocument();
+  });
+
+  it('counts at-risk only for open incidents; a warning on a resolved incident is history', async () => {
+    incidentApi.listVisibleIncidents.mockResolvedValue([
+      incident({ id: 'A', status: 'IN_PROGRESS' }),
+      incident({ id: 'B', status: 'RESOLVED', resolvedAt: '2026-01-01T00:00:00Z' }),
+    ]);
+    slaApi.getViolations.mockResolvedValue([]); // isolate the at-risk behaviour from the admin default violations
+    slaApi.getAtRisk.mockResolvedValue([{ incidentId: 'B' }]); // recorded, but B is resolved now
+    renderPage();
+
+    await screen.findByText('⚠️ SLA At-Risk');
+    expect(within(metric('⚠️ SLA At-Risk')).getByText('0')).toBeInTheDocument();
+    expect(screen.getByText('All SLAs are healthy')).toBeInTheDocument();
+    expect(within(metric('📈 SLA Compliance')).getByText('100%')).toBeInTheDocument(); // compliance unchanged
+  });
+
+  it('shows the amber banner and count for a warning on a still-open incident', async () => {
+    incidentApi.listVisibleIncidents.mockResolvedValue([incident({ id: 'A', status: 'IN_PROGRESS' })]);
+    slaApi.getViolations.mockResolvedValue([]);
+    slaApi.getAtRisk.mockResolvedValue([{ incidentId: 'A' }, { incidentId: 'GONE' }]);
+    renderPage();
+
+    expect(await screen.findByText('1 incident is close to breaching the SLA')).toBeInTheDocument();
+    expect(within(metric('⚠️ SLA At-Risk')).getByText('1')).toBeInTheDocument();
+  });
+
+  it('raises the red banner for a breach on a still-open incident', async () => {
+    incidentApi.listVisibleIncidents.mockResolvedValue([incident({ id: 'A', status: 'IN_PROGRESS' })]);
+    slaApi.getViolations.mockResolvedValue([{ incidentId: 'A' }]);
+    renderPage();
+
+    expect(await screen.findByText('1 open incident is in SLA breach')).toBeInTheDocument();
   });
 
   it('shows technician workload from the dashboard endpoint', async () => {

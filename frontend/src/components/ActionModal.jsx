@@ -7,6 +7,7 @@ export default function ActionModal({
   description,
   actionLabel = 'Submit',
   actionType = 'text', // 'text' | 'feedback' | 'technician'
+  optional = false, // 'text' only: allow submitting without any text
   technicians = [],
   incidentId = null,
   onConfirm,
@@ -57,7 +58,7 @@ export default function ActionModal({
     setError(null);
     try {
       if (actionType === 'text') {
-        if (!text.trim()) {
+        if (!optional && !text.trim()) {
           throw new Error('Please enter text before submitting');
         }
         await onConfirm(text);
@@ -151,7 +152,7 @@ export default function ActionModal({
                 outline: 'none',
                 fontFamily: 'inherit',
               }}
-              required
+              required={!optional}
             />
           )}
 

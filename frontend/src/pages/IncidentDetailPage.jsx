@@ -8,7 +8,7 @@ import SlaBadge from '../components/SlaBadge';
 import LifecycleStepper from '../components/LifecycleStepper';
 import ActionModal from '../components/ActionModal';
 import AuditTimeline from '../components/AuditTimeline';
-import { noteLabel } from '../components/noteLabel';
+import { noteLabel, mergeRejectionRemarks } from '../components/noteLabel';
 import {
   INCIDENT_STATUS,
   ROLE_GROUPS,
@@ -243,15 +243,22 @@ export default function IncidentDetailPage() {
   };
 
   // 9. Reject Resolution / Reopen
-  const handleRejectResolution = async () => {
-    if (window.confirm('Reopen this incident and reject the provided resolution?')) {
-      try {
-        await incidentApi.rejectResolution(incident.id);
-        await loadIncident();
-      } catch (e) {
-        alert(e.message);
-      }
-    }
+  const handleRejectResolution = () => {
+    openModal({
+      title: 'Reopen Incident (Reject Resolution)',
+      description: 'Optionally explain why the resolution did not fix the problem. Your remark is shown with the rejection in the activity log.',
+      actionLabel: 'Reopen Incident',
+      actionType: 'text',
+      optional: true,
+      onConfirm: async (text) => {
+        try {
+          await incidentApi.rejectResolution(incident.id, text);
+        } finally {
+          // The incident may already be reopened even if saving the remark failed
+          await loadIncident();
+        }
+      },
+    });
   };
 
   // 10. Close Incident
@@ -662,7 +669,7 @@ export default function IncidentDetailPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {(incident.notes || []).map((note, idx) => (
+            {mergeRejectionRemarks(incident.notes || []).map((note, idx) => (
               <div
                 key={idx}
                 style={{
@@ -715,6 +722,7 @@ export default function IncidentDetailPage() {
         description={modalConfig.description}
         actionLabel={modalConfig.actionLabel}
         actionType={modalConfig.actionType}
+        optional={modalConfig.optional}
         technicians={technicians}
         incidentId={incident.id}
         onConfirm={modalConfig.onConfirm}

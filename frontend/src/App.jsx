@@ -56,7 +56,7 @@ function AppShell() {
             backgroundColor: '#ffffff',
           }}
         >
-          I-ITSM Intelligent IT Service Management System • Phase 2 Frontend Architecture
+          I-ITSM Intelligent IT Service Management System
         </footer>
       </div>
     </BrowserRouter>
