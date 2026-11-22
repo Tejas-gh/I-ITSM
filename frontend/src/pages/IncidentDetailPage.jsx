@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { incidentApi, referenceApi, escalationApi } from '../api/apiClient';
+import { incidentApi, referenceApi, escalationApi, auditApi } from '../api/apiClient';
+import { INITIAL_USERS } from '../api/mockData';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
@@ -14,12 +15,46 @@ import {
   ROLE_GROUPS,
 } from '../constants/itsmConstants';
 
+function getCloserTitle(closer, incident) {
+  const info = closer || incident;
+  if (!info) return 'Administrator';
+
+  let role = info.closedByRole || info.role;
+  const id = info.closedById || info.id || info.actorId;
+  const name = info.closedByName || info.name;
+
+  if (!role && id) {
+    const lower = String(id).toLowerCase();
+    if (lower.includes('itmgr') || lower.includes('manager')) {
+      role = 'IT_MANAGER';
+    } else if (lower.includes('admin')) {
+      role = 'ADMINISTRATOR';
+    }
+  }
+
+  let roleLabel = 'Administrator';
+  if (role === 'IT_MANAGER' || role === 'IT Manager') {
+    roleLabel = 'IT Manager';
+  } else if (role === 'ADMINISTRATOR' || role === 'Administrator') {
+    roleLabel = 'Administrator';
+  } else if (role) {
+    roleLabel = String(role).replace(/_/g, ' ');
+  }
+
+  const detail = name || id;
+  if (detail && String(detail).toLowerCase() !== roleLabel.toLowerCase()) {
+    return `${roleLabel} (${detail})`;
+  }
+  return roleLabel;
+}
+
 export default function IncidentDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
 
   const [incident, setIncident] = useState(null);
+  const [closerInfo, setCloserInfo] = useState(null);
   const [technicians, setTechnicians] = useState([]);
   const [escalations, setEscalations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,15 +70,96 @@ export default function IncidentDetailPage() {
     onConfirm: () => {},
   });
 
+  const resolveCloser = useCallback(async (inc) => {
+    if (!inc || (!inc.closedAt && inc.status !== INCIDENT_STATUS.CLOSED)) {
+      setCloserInfo(null);
+      return;
+    }
+
+    // 1. Check localStorage first
+    try {
+      const stored = localStorage.getItem(`incident_closure_${inc.id}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && (parsed.closedById || parsed.closedByRole)) {
+          setCloserInfo(parsed);
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Check direct fields on incident
+    if (inc.closedByRole || inc.closedById) {
+      setCloserInfo({
+        closedById: inc.closedById,
+        closedByRole: inc.closedByRole,
+        closedByName: inc.closedByName,
+        closureNote: inc.closureNote,
+      });
+      return;
+    }
+
+    // 3. Try audit trail if user has administrator scope
+    if (ROLE_GROUPS.ADMINISTRATOR.includes(currentUser?.role)) {
+      try {
+        const trail = await auditApi.listForIncident(inc.id);
+        const closeEntry = (trail || []).find(
+          (e) => e.action === 'INCIDENT_CLOSED' || e.newStatus === 'CLOSED' || e.action === 'CLOSED'
+        );
+        if (closeEntry && closeEntry.actorId) {
+          const actorId = closeEntry.actorId;
+          let role = null;
+          let name = null;
+
+          if (currentUser?.id === actorId) {
+            role = currentUser.role;
+            name = currentUser.name;
+          } else {
+            const matchedUser = INITIAL_USERS.find((u) => u.id === actorId || u.email === actorId);
+            if (matchedUser) {
+              role = matchedUser.role;
+              name = matchedUser.name;
+            } else {
+              const lower = actorId.toLowerCase();
+              if (lower.includes('itmgr') || lower.includes('manager')) {
+                role = 'IT_MANAGER';
+              } else if (lower.includes('admin')) {
+                role = 'ADMINISTRATOR';
+              }
+            }
+          }
+
+          setCloserInfo({
+            closedById: actorId,
+            closedByRole: role,
+            closedByName: name,
+            closureNote: inc.closureNote,
+          });
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    setCloserInfo({
+      closedByRole: 'ADMINISTRATOR',
+      closureNote: inc.closureNote,
+    });
+  }, [currentUser]);
+
   const loadIncident = async () => {
     try {
       const data = await incidentApi.getIncident(id);
       setIncident(data);
+      await resolveCloser(data);
 
       const escList = await escalationApi.getIncidentEscalations(id).catch(() => []);
       setEscalations(escList || []);
 
-      if (ROLE_GROUPS.ADMINISTRATOR.includes(currentUser.role)) {
+      if (ROLE_GROUPS.ADMINISTRATOR.includes(currentUser?.role)) {
         const techList = await referenceApi.listTechnicians();
         setTechnicians(techList);
       } else {
@@ -66,7 +182,7 @@ export default function IncidentDetailPage() {
         ]);
         let techList = [];
 
-        if (ROLE_GROUPS.ADMINISTRATOR.includes(currentUser.role)) {
+        if (ROLE_GROUPS.ADMINISTRATOR.includes(currentUser?.role)) {
           techList = await referenceApi.listTechnicians();
         }
 
@@ -74,6 +190,7 @@ export default function IncidentDetailPage() {
           setIncident(data);
           setEscalations(escList || []);
           setTechnicians(techList);
+          await resolveCloser(data);
         }
       } catch (err) {
         if (!ignore) {
@@ -89,7 +206,7 @@ export default function IncidentDetailPage() {
     return () => {
       ignore = true;
     };
-  }, [id, currentUser]);
+  }, [id, currentUser, resolveCloser]);
 
   if (loading) {
     return <div style={{ padding: '60px', textAlign: 'center', color: '#64748b' }}>Loading incident {id}...</div>;
@@ -271,7 +388,20 @@ export default function IncidentDetailPage() {
       actionLabel: 'Close Incident',
       actionType: 'text',
       onConfirm: async (text) => {
-        await incidentApi.closeIncident(incident.id, text, currentUser.id);
+        try {
+          const closureData = {
+            closedById: currentUser.id,
+            closedByName: currentUser.name || currentUser.id,
+            closedByRole: currentUser.role,
+            closedAt: new Date().toISOString(),
+            closureNote: text || null,
+          };
+          localStorage.setItem(`incident_closure_${incident.id}`, JSON.stringify(closureData));
+          setCloserInfo(closureData);
+        } catch {
+          // ignore storage error
+        }
+        await incidentApi.closeIncident(incident.id, text, currentUser.id, currentUser.role, currentUser.name);
         await loadIncident();
       },
     });
@@ -638,7 +768,7 @@ export default function IncidentDetailPage() {
         )}
 
         {/* Closure Note if closed */}
-        {incident.closedAt && (
+        {(incident.closedAt || incident.status === INCIDENT_STATUS.CLOSED) && (
           <div
             style={{
               padding: '16px',
@@ -650,15 +780,15 @@ export default function IncidentDetailPage() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
               <span style={{ fontWeight: '700', color: '#334155', fontSize: '14px' }}>
-                🔒 Closed by Administrator
+                🔒 Closed by {getCloserTitle(closerInfo, incident)}
               </span>
               <span style={{ fontSize: '12px', color: '#64748b' }}>
-                {new Date(incident.closedAt).toLocaleString()}
+                {incident.closedAt ? new Date(incident.closedAt).toLocaleString() : ''}
               </span>
             </div>
-            {incident.closureNote && (
+            {(incident.closureNote || closerInfo?.closureNote) && (
               <p style={{ margin: 0, color: '#475569', fontSize: '13px' }}>
-                {incident.closureNote}
+                {incident.closureNote || closerInfo?.closureNote}
               </p>
             )}
           </div>

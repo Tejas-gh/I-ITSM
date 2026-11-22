@@ -50,6 +50,7 @@ class IncidentSearchServiceTest {
         // Deactivate technicians for inc3 so it stays unassigned (CLASSIFIED)
         f.technician.deactivate();
         f.technician2.deactivate();
+        teamLead.deactivate();
 
         // Create inc3 first
         inc3 = f.service.createIncident(new CreateIncidentCommand(
@@ -61,6 +62,7 @@ class IncidentSearchServiceTest {
         // Reactivate technicians for inc1 and inc2
         f.technician.activate();
         f.technician2.activate();
+        teamLead.activate();
 
         // Assign strategy picks tech1 for inc1
         f.assignmentStrategy.setDesignatedTechnician(f.technician);

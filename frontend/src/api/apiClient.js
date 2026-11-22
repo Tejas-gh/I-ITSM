@@ -655,7 +655,7 @@ export const incidentApi = {
   },
 
   // POST /api/incidents/{id}/close
-  async closeIncident(id, closureNote, closedById) {
+  async closeIncident(id, closureNote, closedById, closedByRole, closedByName) {
     if (!USE_MOCK) {
       return http(`/incidents/${id}/close`, {
         method: 'POST',
@@ -667,6 +667,8 @@ export const incidentApi = {
       inc.status = INCIDENT_STATUS.CLOSED;
       inc.closedAt = new Date().toISOString();
       inc.closedById = closedById || 'ADMIN01';
+      inc.closedByRole = closedByRole || (closedById === 'ITMGR01' || closedById?.toLowerCase().includes('manager') ? 'IT_MANAGER' : 'ADMINISTRATOR');
+      inc.closedByName = closedByName || (inc.closedByRole === 'IT_MANAGER' ? 'Patricia Chen' : 'Sam Admin');
       inc.closureNote = closureNote || null;
     });
   },

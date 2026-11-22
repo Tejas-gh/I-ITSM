@@ -271,6 +271,10 @@ export const INITIAL_INCIDENTS = [
     resolvedAt: iso(minutesAgo(60)),
     verifiedAt: iso(minutesAgo(30)),
     closedAt: iso(minutesAgo(10)),
+    closedById: 'ADMIN01',
+    closedByRole: ROLES.ADMINISTRATOR,
+    closedByName: 'Sam Admin',
+    closureNote: 'Hardware replacement verified with user; issue resolved.',
     notes: [
       {
         authorId: 'TECH02',
