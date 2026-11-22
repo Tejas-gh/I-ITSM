@@ -1,10 +1,32 @@
+import { useState, useEffect } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { incidentApi, USE_MOCK } from '../api/apiClient';
+import { incidentApi, slaApi, testApi, USE_MOCK } from '../api/apiClient';
+import { advanceSimulatedTime, getSimulatedTimeOffset, resetSimulatedTime } from '../utils/clockUtils';
 import NotificationBell from './NotificationBell';
 
 export default function Navbar() {
   const { currentUser, availableUsers, selectUser, logout, isEmployee, isAdmin } = useAuth();
+  const [offsetMs, setOffsetMs] = useState(getSimulatedTimeOffset());
+
+  useEffect(() => {
+    const onAdvanced = (e) => setOffsetMs(e.detail?.offset || getSimulatedTimeOffset());
+    window.addEventListener('iitsm_clock_advanced', onAdvanced);
+    return () => window.removeEventListener('iitsm_clock_advanced', onAdvanced);
+  }, []);
+
+  const handleSkipTime = async () => {
+    advanceSimulatedTime(270000);
+    await testApi.advanceTime(270).catch(() => {});
+    await slaApi.runMonitor().catch(() => {});
+  };
+
+  const handleResetTime = async (e) => {
+    e.stopPropagation();
+    resetSimulatedTime();
+    await testApi.resetTime().catch(() => {});
+    await slaApi.runMonitor().catch(() => {});
+  };
 
   const handleResetData = () => {
     if (window.confirm('Reset all mock incident data back to original seed?')) {
@@ -113,7 +135,62 @@ export default function Navbar() {
         </div>
 
         {/* Right: Active Role Switcher, Notifications & Tools */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Skip 4m 30s Time Fast-Forward for Testing */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button
+              type="button"
+              onClick={handleSkipTime}
+              title="Skip 4 minutes 30 seconds to fast-forward SLA countdowns, warnings, breaches, and escalations"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                backgroundColor: '#fffbeb',
+                border: '1px solid #fde68a',
+                color: '#b45309',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+              }}
+            >
+              <span>⏩ Skip 4m 30s</span>
+              {offsetMs > 0 && (
+                <span
+                  style={{
+                    backgroundColor: '#fef3c7',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    color: '#92400e',
+                  }}
+                >
+                  +{Math.floor(offsetMs / 60000)}m {Math.floor((offsetMs % 60000) / 1000)}s
+                </span>
+              )}
+            </button>
+            {offsetMs > 0 && (
+              <button
+                type="button"
+                onClick={handleResetTime}
+                title="Reset time offset to normal"
+                style={{
+                  padding: '6px 8px',
+                  borderRadius: '8px',
+                  backgroundColor: '#f1f5f9',
+                  border: '1px solid #cbd5e1',
+                  color: '#64748b',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                }}
+              >
+                ↺
+              </button>
+            )}
+          </div>
+
           {!USE_MOCK && <NotificationBell />}
 
           <div

@@ -70,7 +70,7 @@ export default function IncidentDetailPage() {
     onConfirm: () => {},
   });
 
-  const resolveCloser = useCallback(async (inc) => {
+  const resolveCloser = useCallback(async (inc, currentEscalations = []) => {
     if (!inc || (!inc.closedAt && inc.status !== INCIDENT_STATUS.CLOSED)) {
       setCloserInfo(null);
       return;
@@ -144,20 +144,59 @@ export default function IncidentDetailPage() {
       }
     }
 
+    // 4. Deducing closer for non-admins (e.g. employee) using resolution and escalations
+    const resolverId = inc.resolution?.resolverId;
+    let deducedRole = null;
+    let deducedId = null;
+
+    if (resolverId) {
+      const lower = resolverId.toLowerCase();
+      if (lower.includes('itmgr') || lower.includes('manager')) {
+        deducedRole = 'IT_MANAGER';
+        deducedId = resolverId;
+      } else if (lower.includes('admin')) {
+        deducedRole = 'ADMINISTRATOR';
+        deducedId = resolverId;
+      }
+    }
+
+    const escList = currentEscalations.length > 0 ? currentEscalations : escalations;
+    const latestEsc = escList.length > 0 ? escList[escList.length - 1] : null;
+
+    if (!deducedRole && latestEsc?.targetRole) {
+      if (latestEsc.targetRole === 'IT_MANAGER') {
+        deducedRole = 'IT_MANAGER';
+        deducedId = resolverId || 'IT Manager';
+      } else if (latestEsc.targetRole === 'ADMINISTRATOR') {
+        deducedRole = 'ADMINISTRATOR';
+        deducedId = resolverId || 'Administrator';
+      }
+    }
+
+    if (deducedRole) {
+      setCloserInfo({
+        closedById: deducedId,
+        closedByRole: deducedRole,
+        closedByName: deducedId,
+        closureNote: inc.closureNote,
+      });
+      return;
+    }
+
     setCloserInfo({
       closedByRole: 'ADMINISTRATOR',
       closureNote: inc.closureNote,
     });
-  }, [currentUser]);
+  }, [currentUser, escalations]);
 
   const loadIncident = async () => {
     try {
       const data = await incidentApi.getIncident(id);
       setIncident(data);
-      await resolveCloser(data);
 
       const escList = await escalationApi.getIncidentEscalations(id).catch(() => []);
       setEscalations(escList || []);
+      await resolveCloser(data, escList || []);
 
       if (ROLE_GROUPS.ADMINISTRATOR.includes(currentUser?.role)) {
         const techList = await referenceApi.listTechnicians();
@@ -190,7 +229,7 @@ export default function IncidentDetailPage() {
           setIncident(data);
           setEscalations(escList || []);
           setTechnicians(techList);
-          await resolveCloser(data);
+          await resolveCloser(data, escList || []);
         }
       } catch (err) {
         if (!ignore) {

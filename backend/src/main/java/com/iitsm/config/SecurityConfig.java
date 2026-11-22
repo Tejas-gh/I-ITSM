@@ -50,7 +50,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/api/auth/login", "/api/auth/register", "/error").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/auth/register", "/api/test/**", "/error").permitAll()
                         // SLA monitoring reads are for staff only; employees get 403 (POST /api/sla/monitor/run
                         // stays administrator-only in the application layer)
                         .requestMatchers(HttpMethod.GET, "/api/sla/violations", "/api/sla/at-risk")

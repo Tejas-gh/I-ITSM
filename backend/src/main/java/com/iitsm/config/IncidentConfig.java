@@ -40,7 +40,7 @@ public class IncidentConfig {
 
     @Bean
     Clock clock() {
-        return Clock.systemUTC();
+        return new com.iitsm.infrastructure.clock.AdjustableClock(java.time.ZoneId.of("UTC"));
     }
 
     @Bean

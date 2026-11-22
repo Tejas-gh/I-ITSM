@@ -1105,3 +1105,31 @@ export const escalationApi = {
     return [];
   },
 };
+
+export const testApi = {
+  async advanceTime(seconds = 270) {
+    if (!USE_MOCK) {
+      return http(`/test/clock/advance?seconds=${seconds}`, { method: 'POST' }).catch(() => null);
+    }
+    mockIncidents = getStoredIncidents().map((inc) => {
+      if (inc.status === INCIDENT_STATUS.CLOSED || inc.status === INCIDENT_STATUS.RESOLVED) {
+        return inc;
+      }
+      const shift = seconds * 1000;
+      return {
+        ...inc,
+        createdAt: inc.createdAt ? new Date(new Date(inc.createdAt).getTime() - shift).toISOString() : inc.createdAt,
+        responseDeadline: inc.responseDeadline ? new Date(new Date(inc.responseDeadline).getTime() - shift).toISOString() : inc.responseDeadline,
+        resolutionDeadline: inc.resolutionDeadline ? new Date(new Date(inc.resolutionDeadline).getTime() - shift).toISOString() : inc.resolutionDeadline,
+      };
+    });
+    saveStoredIncidents(mockIncidents);
+    return { secondsAdvanced: seconds };
+  },
+  async resetTime() {
+    if (!USE_MOCK) {
+      return http('/test/clock/reset', { method: 'POST' }).catch(() => null);
+    }
+    return { reset: true };
+  },
+};

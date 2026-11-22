@@ -1,13 +1,23 @@
+import { useState, useEffect } from 'react';
 import { SLA_STATUS } from '../constants/itsmConstants';
+import { getSimulatedNow } from '../utils/clockUtils';
 
 export default function SlaBadge({ deadline, doneAt, label = 'SLA' }) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const onAdvanced = () => setTick((t) => t + 1);
+    window.addEventListener('iitsm_clock_advanced', onAdvanced);
+    return () => window.removeEventListener('iitsm_clock_advanced', onAdvanced);
+  }, []);
+
   if (!deadline) {
     return <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>;
   }
 
   const deadlineDate = new Date(deadline);
   const isDone = Boolean(doneAt);
-  const now = new Date();
+  const now = getSimulatedNow();
 
   let status = SLA_STATUS.ON_TRACK;
   let text;
