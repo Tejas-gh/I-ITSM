@@ -6,8 +6,13 @@ import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import SlaBadge from '../components/SlaBadge';
 import TechnicianWorkloadPanel from '../components/TechnicianWorkloadPanel';
-import { employeeMetrics, isResolved, scopeAlertsToIncidents } from './dashboardMetrics';
+import { employeeMetrics, isAwaitingClosure, isResolved, scopeAlertsToIncidents } from './dashboardMetrics';
 import { INCIDENT_STATUS, PRIORITY_LEVEL, PRIORITY_LABELS } from '../constants/itsmConstants';
+
+/** "Display name (login id)"; just the id when no distinct display name is known (e.g. a token-only session). */
+function greetingName(user) {
+  return user.name && user.name !== user.id ? `${user.name} (${user.id})` : user.id;
+}
 
 export default function DashboardPage() {
   const { currentUser, isEmployee, isAdmin } = useAuth();
@@ -61,6 +66,9 @@ export default function DashboardPage() {
   ).length;
   const criticalCount = incidents.filter((i) => i.priority === PRIORITY_LEVEL.P1).length;
   const resolvedCount = incidents.filter(isResolved).length;
+  // Administrators / IT Managers close VERIFIED incidents: show them separately instead of inside "Resolved"
+  const awaitingClosureCount = incidents.filter(isAwaitingClosure).length;
+  const adminResolvedCount = resolvedCount - awaitingClosureCount;
   const awaitingAckCount = incidents.filter((i) => i.status === INCIDENT_STATUS.ASSIGNED).length;
   const mine = employeeMetrics(incidents);
 
@@ -113,7 +121,7 @@ export default function DashboardPage() {
       <div>
         <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#0f172a', margin: '0 0 6px 0' }}>{title}</h1>
         <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
-          {subtitle} <strong style={{ color: '#0f172a' }}>{currentUser.name}</strong>
+          {subtitle} <strong style={{ color: '#0f172a' }}>{greetingName(currentUser)}</strong>
           <span style={roleChipStyle}>{currentUser.role}</span>
         </p>
       </div>
@@ -235,7 +243,12 @@ export default function DashboardPage() {
       <div style={gridStyle}>
         <StatTile icon="📋" label="Total Incidents" value={total} color="#0f172a" sub="Visible in role scope" />
         <StatTile icon="🛠️" label="Open & Active" value={openCount} color="#2563eb" sub="Require resolution" />
-        <StatTile icon="✅" label="Resolved" value={resolvedCount} color="#16a34a" sub="Resolved, verified or closed" />
+        <StatTile icon="✅" label="Resolved" value={isAdmin ? adminResolvedCount : resolvedCount} color="#16a34a"
+          sub={isAdmin ? 'Resolved or closed' : 'Resolved, verified or closed'} />
+        {isAdmin && (
+          <StatTile icon="🔒" label="Awaiting Closure" value={awaitingClosureCount}
+            color={awaitingClosureCount > 0 ? '#d97706' : '#16a34a'} sub="Verified · ready for final closure" to="/incidents" />
+        )}
         <StatTile icon="🔥" label="P1 Critical" value={criticalCount} color="#dc2626" sub="Immediate escalation" />
       </div>
 
@@ -256,7 +269,8 @@ export default function DashboardPage() {
           <BreakdownBar
             items={[
               { label: 'Open', value: openCount, color: '#2563eb' },
-              { label: 'Closed out', value: resolvedCount, color: '#16a34a' },
+              ...(isAdmin ? [{ label: 'Awaiting closure', value: awaitingClosureCount, color: '#d97706' }] : []),
+              { label: 'Closed out', value: isAdmin ? adminResolvedCount : resolvedCount, color: '#16a34a' },
             ]}
             emptyText="No incidents yet."
           />

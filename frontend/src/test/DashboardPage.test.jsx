@@ -225,3 +225,70 @@ describe('Administrator dashboard', () => {
     expect(metric('🚨 SLA Violations').closest('a')).toHaveAttribute('href', '/sla');
   });
 });
+
+describe.each(['ADMINISTRATOR', 'IT_MANAGER'])('Awaiting Closure on the %s dashboard', (role) => {
+  beforeEach(() => {
+    auth.value = asRole(role);
+    incidentApi.listVisibleIncidents.mockResolvedValue([
+      incident({ id: 'A', status: 'IN_PROGRESS' }),
+      incident({ id: 'B', status: 'RESOLVED', resolvedAt: '2026-01-01T00:00:00Z' }),
+      incident({ id: 'V1', status: 'VERIFIED', resolvedAt: '2026-01-01T00:00:00Z' }),
+      incident({ id: 'V2', status: 'VERIFIED', resolvedAt: '2026-01-01T00:00:00Z' }),
+      incident({ id: 'C', status: 'CLOSED', resolvedAt: '2026-01-01T00:00:00Z' }),
+    ]);
+  });
+
+  it('shows VERIFIED incidents as a separate Awaiting Closure count, not inside Resolved', async () => {
+    renderPage();
+
+    await screen.findByText('Awaiting Closure');
+    expect(within(metric('Awaiting Closure')).getByText('2')).toBeInTheDocument();
+    // Resolved now means resolved or closed only (B + C)
+    expect(within(metric('Resolved')).getByText('2')).toBeInTheDocument();
+  });
+
+  it('drops an incident from Awaiting Closure once it is CLOSED', async () => {
+    incidentApi.listVisibleIncidents.mockResolvedValue([
+      incident({ id: 'V1', status: 'CLOSED', resolvedAt: '2026-01-01T00:00:00Z' }),
+    ]);
+    renderPage();
+
+    await screen.findByText('Awaiting Closure');
+    expect(within(metric('Awaiting Closure')).getByText('0')).toBeInTheDocument();
+    expect(within(metric('Resolved')).getByText('1')).toBeInTheDocument();
+  });
+});
+
+describe('Awaiting Closure is not shown to other roles', () => {
+  it('a technician dashboard has no Awaiting Closure tile', async () => {
+    auth.value = asRole('TECHNICIAN');
+    incidentApi.listVisibleIncidents.mockResolvedValue([incident({ id: 'V1', status: 'VERIFIED' })]);
+    renderPage();
+
+    await screen.findByText('Awaiting Acknowledgement');
+    expect(screen.queryByText('Awaiting Closure')).not.toBeInTheDocument();
+  });
+});
+
+describe.each(['EMPLOYEE', 'TECHNICIAN', 'TEAM_LEAD', 'ADMINISTRATOR', 'IT_MANAGER'])('Greeting for %s', (role) => {
+  beforeEach(() => {
+    incidentApi.listVisibleIncidents.mockResolvedValue([]);
+  });
+
+  it('shows the display name first, then the login id, and keeps the role badge', async () => {
+    auth.value = { ...asRole(role), currentUser: { id: 'emp1', name: 'Ganesh', role } };
+    renderPage();
+
+    expect(await screen.findByText('Ganesh (emp1)')).toBeInTheDocument();
+    expect(screen.getByText(role)).toBeInTheDocument();
+  });
+
+  it('shows the login id only once when no distinct display name is available', async () => {
+    auth.value = { ...asRole(role), currentUser: { id: 'emp1', name: 'emp1', role } };
+    renderPage();
+
+    expect(await screen.findByText('emp1')).toBeInTheDocument();
+    expect(screen.queryByText('emp1 (emp1)')).not.toBeInTheDocument();
+    expect(screen.getByText(role)).toBeInTheDocument();
+  });
+});

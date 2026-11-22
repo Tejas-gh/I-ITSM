@@ -5,6 +5,9 @@ const { WAITING_FOR_USER, RESOLVED, VERIFIED, CLOSED } = INCIDENT_STATUS;
 /** Open = not yet resolved, verified or closed. */
 export const isOpen = (inc) => ![RESOLVED, VERIFIED, CLOSED].includes(inc.status);
 
+/** Verified by the reporter and waiting for the final closure by an Administrator / IT Manager. CLOSED leaves this state. */
+export const isAwaitingClosure = (inc) => inc.status === VERIFIED;
+
 /** Resolved from the user's point of view: resolved, verified or closed. */
 export const isResolved = (inc) => !isOpen(inc);
 

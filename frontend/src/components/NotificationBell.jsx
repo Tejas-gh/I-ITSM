@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { notificationApi, USE_MOCK } from '../api/apiClient';
+import { notificationApi, incidentApi, USE_MOCK } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 
 function formatTime(isoString) {
@@ -25,11 +25,23 @@ function timestamp(notification) {
   return Number.isFinite(value) ? value : 0;
 }
 
+// Status (and verifiedAt) per visible incident. Needs Action is derived from this (the real workflow state),
+// never from whether a notification has been read. Returns null on failure so the previous map is kept.
+async function loadIncidentStatuses(user) {
+  try {
+    const list = await incidentApi.listVisibleIncidents(user);
+    return Object.fromEntries((Array.isArray(list) ? list : []).map((i) => [i.id, { status: i.status, verifiedAt: i.verifiedAt }]));
+  } catch {
+    return null;
+  }
+}
+
 export default function NotificationBell() {
   const { currentUser } = useAuth();
   const role = String(currentUser?.role || '').toUpperCase();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
+  const [incidentInfo, setIncidentInfo] = useState({});
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(false);
@@ -39,8 +51,12 @@ export default function NotificationBell() {
   const fetchNotifications = useCallback(async () => {
     if (USE_MOCK || !currentUser) return;
     try {
-      const list = await notificationApi.getNotifications();
+      const [list, statuses] = await Promise.all([
+        notificationApi.getNotifications(),
+        loadIncidentStatuses(currentUser),
+      ]);
       setNotifications(Array.isArray(list) ? list : []);
+      if (statuses) setIncidentInfo(statuses);
     } catch {
       // Keep the existing notification list during background failures.
     }
@@ -57,8 +73,14 @@ export default function NotificationBell() {
     const load = async () => {
       if (USE_MOCK || !currentUser) return;
       try {
-        const list = await notificationApi.getNotifications();
-        if (!ignore) setNotifications(Array.isArray(list) ? list : []);
+        const [list, statuses] = await Promise.all([
+          notificationApi.getNotifications(),
+          loadIncidentStatuses(currentUser),
+        ]);
+        if (!ignore) {
+          setNotifications(Array.isArray(list) ? list : []);
+          if (statuses) setIncidentInfo(statuses);
+        }
       } catch {
         // Ignore background polling failures.
       }
@@ -118,6 +140,11 @@ export default function NotificationBell() {
   };
 
   const getNotificationMeta = (notification) => {
+    // Admin / IT Manager: the notification of a VERIFIED incident is the actionable "close it" step.
+    if (closureIds.has(notification.id)) {
+      return { label: 'Awaiting Closure', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true, pending: ['VERIFIED'] };
+    }
+
     const raw = String(
       notification.type ?? notification.kind ?? notification.category ?? notification.eventType ?? ''
     ).toUpperCase();
@@ -130,7 +157,7 @@ export default function NotificationBell() {
     if (text.includes('ESCALAT')) {
       const escalationRole = ['TEAM_LEAD', 'ADMINISTRATOR', 'IT_MANAGER'].includes(role);
       return escalationRole
-        ? { label: 'Escalation', icon: '↗', bg: '#fef2f2', color: '#b91c1c', actionable: true }
+        ? { label: 'Escalation', icon: '↗', bg: '#fef2f2', color: '#b91c1c', actionable: true, pending: ['CLASSIFIED', 'ASSIGNED'] }
         : { label: 'Incident Update', icon: '✓', bg: '#f0fdf4', color: '#15803d', actionable: false };
     }
 
@@ -144,7 +171,7 @@ export default function NotificationBell() {
         text.includes('ADDITIONAL INFORMATION') ||
         text.includes('INFORMATION REQUIRED')
       ) {
-        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true };
+        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true, pending: ['WAITING_FOR_USER'] };
       }
 
       if (
@@ -154,22 +181,22 @@ export default function NotificationBell() {
         text.includes('RESOLUTION READY') ||
         text.includes('RESOLUTION SUBMITTED')
       ) {
-        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true };
+        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true, pending: ['RESOLVED'] };
       }
 
       if (text.includes('FEEDBACK')) {
-        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true };
+        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true, pending: null };
       }
     }
 
     // Technician / Team Lead: assignment and rejected resolution require work.
     if (role === 'TECHNICIAN' || role === 'TEAM_LEAD') {
       if (text.includes('ASSIGN')) {
-        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true };
+        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true, pending: ['ASSIGNED'] };
       }
 
       if (text.includes('REJECT')) {
-        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true };
+        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true, pending: ['IN_PROGRESS'] };
       }
 
       if (
@@ -177,7 +204,7 @@ export default function NotificationBell() {
         text.includes('INFORMATION RECEIVED') ||
         text.includes('ADDITIONAL INFORMATION RECEIVED')
       ) {
-        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true };
+        return { label: 'Action Required', icon: '!', bg: '#eff6ff', color: '#1d4ed8', actionable: true, pending: ['IN_PROGRESS'] };
       }
     }
 
@@ -196,6 +223,13 @@ export default function NotificationBell() {
   };
 
   const getDisplayNotification = (notification) => {
+    if (closureIds.has(notification.id)) {
+      return {
+        ...notification,
+        title: 'Incident Verified — Awaiting Closure',
+        body: `Incident ${notification.incidentId} has been verified and is ready for final closure.`,
+      };
+    }
     if (role !== 'TECHNICIAN' && role !== 'TEAM_LEAD') return notification;
 
     const raw = String(
@@ -231,14 +265,41 @@ export default function NotificationBell() {
     }
   });
 
-  const isCurrentAction = (notification) => {
+  // Closure action (Admin / IT Manager): the notification created by the VERIFIED event itself. That event and
+  // the incident's verifiedAt share one timestamp, so only the notification created at exactly verifiedAt matches;
+  // later notes/updates on a VERIFIED incident (different timestamps) are never labelled. CLOSED is never a closure action.
+  const closureIds = new Set();
+  if (role === 'ADMINISTRATOR' || role === 'IT_MANAGER') {
+    sortedNotifications.forEach((notification) => {
+      const info = notification.incidentId ? incidentInfo[notification.incidentId] : null;
+      if (info?.status !== 'VERIFIED' || !info.verifiedAt) return;
+      if (new Date(notification.createdAt).getTime() === new Date(info.verifiedAt).getTime()) {
+        closureIds.add(notification.id);
+      }
+    });
+  }
+
+  // Reading a notification never completes its action. An action stays "Needs Action" while the incident is
+  // still in the workflow state that action belongs to, and clears once the incident has moved on.
+  // If the incident state is unknown (not visible to this user) fall back to "newest notification wins".
+  const isPendingAction = (notification) => {
     const meta = getNotificationMeta(notification);
-    if (!meta.actionable || notification.read) return false;
+    if (!meta.actionable) return false;
     if (!notification.incidentId) return true;
+    const status = incidentInfo[notification.incidentId]?.status;
+    if (status && meta.pending) return meta.pending.includes(status);
     return latestByIncident.get(notification.incidentId)?.id === notification.id;
   };
 
-  const currentActions = sortedNotifications.filter(isCurrentAction);
+  // One current action per incident: the newest pending one (e.g. Level 1/2/3 escalations count once).
+  const actionIncidents = new Set();
+  const currentActions = sortedNotifications.filter((notification) => {
+    if (!isPendingAction(notification)) return false;
+    if (!notification.incidentId) return true;
+    if (actionIncidents.has(notification.incidentId)) return false;
+    actionIncidents.add(notification.incidentId);
+    return true;
+  });
   const currentSlas = sortedNotifications.filter((notification) => {
     if (notification.read || getNotificationMeta(notification).label !== 'SLA Alert') return false;
     if (!notification.incidentId) return true;
