@@ -8,44 +8,34 @@
 **Frontend:** React, Vite  
 **Database:** PostgreSQL 18.6
 
-This guide documents the development environment setup for Windows 11 using VS Code and PowerShell.
+This guide explains how to set up and run the I-ITSM application on Windows 11 using PowerShell.
+
+The repository contains the complete backend, frontend, database migrations, seed data, tests, and project documentation.
 
 ---
 
 ## 2. Prerequisites
 
-| Software | Installed version |
+Install the following software before running the project:
+
+| Software | Required |
 |---|---|
-| Java | Eclipse Temurin JDK 21.0.13 |
-| Spring Boot | 4.1.2 |
-| Maven | 3.10.0 (Maven Wrapper) |
-| Node.js | 26.2.0 |
-| npm | 11.13.0 |
-| PostgreSQL | 18.6 |
-| pgAdmin | Installed with PostgreSQL |
-| Git | Installed |
+| Java | JDK 21 |
+| Spring Boot | 4.1.2 (included through Maven project configuration) |
+| Maven | Maven Wrapper included |
+| Node.js | Node.js 26.x recommended |
+| npm | npm 11.x recommended |
+| PostgreSQL | PostgreSQL 18.x |
+| Git | Required to clone the repository |
+| VS Code | Recommended development environment |
 
-VS Code is used as the development environment.
+A separate Maven installation is **not required** because the backend includes the Maven Wrapper.
 
-### Java installation and configuration
+### Java
 
-1. Download and install Eclipse Temurin JDK 21.
-2. Enable the installer options to add Java to PATH and configure JAVA_HOME.
-3. Set the JAVA_HOME environment variable to the JDK installation directory.
-4. Add the JDK `bin` directory to the System Path, above Oracle Java entries if present.
-5. Restart VS Code after changing environment variables.
+Install Eclipse Temurin JDK 21 or another compatible Java 21 JDK.
 
-Example paths:
-
-```text
-JAVA_HOME:
-C:\Users\<username>\AppData\Local\Programs\Eclipse Adoptium\jdk-21.0.13.9-hotspot\
-
-PATH:
-C:\Users\<username>\AppData\Local\Programs\Eclipse Adoptium\jdk-21.0.13.9-hotspot\bin
-```
-
-Verify:
+Verify the installation:
 
 ```powershell
 java -version
@@ -53,25 +43,13 @@ where.exe java
 $env:JAVA_HOME
 ```
 
-The first Java executable returned by `where.exe java` should be the Temurin JDK 21 executable.
+The Java version should be 21.
 
-### Maven
-
-A separate Maven installation is not required. The backend includes Maven Wrapper files:
-
-- `mvnw`
-- `mvnw.cmd`
-- `.mvn/`
-
-Verify from the backend directory:
-
-```powershell
-.\mvnw.cmd -version
-```
+If multiple Java installations are present, ensure that the Java 21 installation is the one used by the project.
 
 ---
 
-## 3. Repository Setup
+## 3. Clone the Repository
 
 Clone the repository:
 
@@ -80,134 +58,64 @@ git clone https://github.com/Tejas-gh/I-ITSM.git
 cd I-ITSM
 ```
 
-The root project structure is:
+The project structure is:
 
 ```text
 I-ITSM/
 ├── README.md
-├── AGENTS.md
 ├── .gitignore
 ├── .gitattributes
 ├── backend/
 ├── frontend/
 └── docs/
-    ├── design-doc.md
+    ├── CONTRACT_FREEZE.md
+    ├── IMPLEMENTATION_MANIFEST.md
     ├── api-contract.md
-    ├── conventions.md
-    ├── test-cases.md
-    ├── ai-log.md
+    ├── priority-design.md
     ├── setup-guide.md
+    ├── sla-and-lifecycle-design.md
+    ├── test-cases.md
     └── diagrams/
 ```
 
 ---
 
-## 4. Backend Setup
+# 4. PostgreSQL Setup
 
-### Technology and dependencies
+PostgreSQL is required for the normal application runtime.
 
-The backend was generated using Spring Initializr.
+## 4.1 Install PostgreSQL
 
-Configuration:
+Install PostgreSQL 18.x for Windows.
 
-- Project: Maven
-- Language: Java
-- Group: `com.iitsm`
-- Artifact: `iitsm`
-- Package: `com.iitsm`
-- Packaging: Jar
-- Java: 21
-- Spring Boot: 4.1.2
+During installation:
 
-Selected dependencies:
+- Install PostgreSQL Server.
+- Install pgAdmin 4.
+- Keep the default PostgreSQL port `5432`.
+- Set a password for the `postgres` user.
+- Keep the password private.
 
-- Spring WebMVC
-- Spring Security
-- Spring Data JPA
-- Validation
-- PostgreSQL Driver
-- H2 Database
-- Flyway Migration
-
-The generated Spring Boot 4 dependency names should be retained. Do not replace them with older Spring Boot 3 starter names.
-
-### Backend structure
-
-```text
-backend/
-├── pom.xml
-├── mvnw
-├── mvnw.cmd
-├── .mvn/
-└── src/
-    ├── main/
-    │   ├── java/com/iitsm/
-    │   │   └── IitsmApplication.java
-    │   └── resources/
-    │       ├── application.yaml
-    │       └── application-local.yml
-    └── test/
-```
-
-### Build and compile
-
-From the backend directory:
-
-```powershell
-.\mvnw.cmd clean compile
-```
-
-Run the application:
-
-```powershell
-.\mvnw.cmd spring-boot:run
-```
-
-The backend runs on:
-
-```text
-http://localhost:8080
-```
-
----
-
-## 5. PostgreSQL Setup
-
-### Installation
-
-1. Download PostgreSQL for Windows from the official PostgreSQL website.
-2. Install PostgreSQL Server, pgAdmin 4 and Command Line Tools.
-3. Stack Builder is optional.
-4. Keep the default installation directory:
+The default installation directory is typically:
 
 ```text
 C:\Program Files\PostgreSQL\18
 ```
 
-5. Keep the default port:
+The exact installation directory may differ depending on the installation.
 
-```text
-5432
-```
+## 4.2 Create the I-ITSM Database
 
-6. Set a password for the `postgres` superuser during installation. Keep it private.
+Open pgAdmin 4 and connect to the PostgreSQL server.
 
-### Create the project database
-
-1. Open pgAdmin 4.
-2. Connect to PostgreSQL 18 using the password created during installation.
-3. Right-click Databases.
-4. Select Create → Database.
-5. Enter:
+Create a database with:
 
 ```text
 Database: iitsm
 Owner: postgres
 ```
 
-6. Save.
-
-The database connection details are:
+The expected connection details are:
 
 | Setting | Value |
 |---|---|
@@ -215,8 +123,17 @@ The database connection details are:
 | Port | 5432 |
 | Database | iitsm |
 | Username | postgres |
+| Password | The password chosen during PostgreSQL installation |
 
-### Configure the backend connection
+No application tables need to be created manually.
+
+---
+
+# 5. Backend Configuration
+
+## 5.1 Create the Local Configuration File
+
+The local PostgreSQL password must not be committed to Git.
 
 Create:
 
@@ -224,7 +141,7 @@ Create:
 backend/src/main/resources/application-local.yml
 ```
 
-Add:
+Use:
 
 ```yaml
 spring:
@@ -237,29 +154,102 @@ spring:
     hibernate:
       ddl-auto: none
     open-in-view: false
+
+iitsm:
+  sla:
+    monitor:
+      enabled: true
 ```
 
-Replace the password placeholder with the password configured during PostgreSQL installation.
+Replace:
 
-**Important:** This file contains local credentials and must never be committed to Git.
-
-The root `.gitignore` already excludes `application-local.yml`.
-
-### Activate the local profile
-
-The committed `application.yaml` contains:
-
-```yaml
-spring:
-  application:
-    name: iitsm
-  profiles:
-    active: local
+```text
+YOUR_POSTGRES_PASSWORD
 ```
 
-This activates the local configuration when running the application.
+with the password configured for the local PostgreSQL installation.
 
-### Database connection verification
+Do **not** commit this file if it contains a real password.
+
+The repository's `.gitignore` excludes the local configuration file.
+
+## 5.2 Spring Profile
+
+The application is configured to use the local profile for normal development.
+
+The local configuration supplies the PostgreSQL connection and local SLA-monitor configuration.
+
+---
+
+# 6. Database Migrations
+
+The project uses Flyway for database schema management.
+
+Migration files are located at:
+
+```text
+backend/src/main/resources/db/migration/
+```
+
+The repository currently contains migrations through V7:
+
+```text
+V1__schema.sql
+V2__seed_reference_data.sql
+V3__notifications.sql
+V4__credentials.sql
+V5__incident_id_sequence.sql
+V6__sla_alerts.sql
+V7__escalations.sql
+```
+
+When the backend starts for the first time, Flyway automatically applies the available migrations to the `iitsm` database.
+
+This creates the required schema and reference/seed data.
+
+**No manual table creation is required.**
+
+If the database is empty, simply start the backend after creating the `iitsm` database.
+
+---
+
+# 7. Backend Setup and Run
+
+Open PowerShell and enter the backend directory:
+
+```powershell
+cd backend
+```
+
+## 7.1 Verify Maven Wrapper
+
+Run:
+
+```powershell
+.\mvnw.cmd -version
+```
+
+The Maven Wrapper downloads and uses the required Maven version automatically.
+
+## 7.2 Compile the Backend
+
+Run:
+
+```powershell
+.\mvnw.cmd clean compile
+```
+
+## 7.3 Run Backend Tests
+
+To run the complete backend test suite:
+
+```powershell
+.\mvnw.cmd clean test
+```
+
+The project contains unit, integration, persistence, security, lifecycle, SLA, notification, search, and escalation tests.
+
+## 7.4 Start the Backend
 
 Run:
 
@@ -267,196 +257,349 @@ Run:
 .\mvnw.cmd spring-boot:run
 ```
 
-A successful connection produces log messages similar to:
-
-```text
-HikariPool-1 - Start completed.
-Database: jdbc:postgresql://localhost:5432/iitsm
-PostgreSQL 18.6
-Initialized JPA EntityManagerFactory
-Started IitsmApplication
-```
-
-Flyway currently has no migrations because the project schema has not yet been created. The empty-schema warning is expected at this stage.
-
----
-
-## 6. Frontend Setup
-
-### Technology
-
-- React
-- Vite
-- React Router DOM
-- Recharts
-- Vitest
-- React Testing Library
-
-### Create the frontend
-
-The frontend was generated using:
-
-```powershell
-npm create vite@latest frontend -- --template react
-```
-
-Install dependencies:
-
-```powershell
-cd frontend
-npm install
-npm install react-router-dom recharts
-npm install -D vitest jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event
-```
-
-### Frontend structure
-
-```text
-frontend/
-├── package.json
-├── package-lock.json
-├── vite.config.js
-├── index.html
-├── .env.example
-└── src/
-    ├── App.jsx
-    ├── main.jsx
-    ├── index.css
-    └── test/
-        └── setup.js
-```
-
-### Run the frontend
-
-From the frontend directory:
-
-```powershell
-npm run dev
-```
-
-Vite runs at:
-
-```text
-http://localhost:5173
-```
-
-### Frontend verification commands
-
-```powershell
-npm run build
-npm run lint
-npm run test -- --run
-```
-
-The initial build and lint checks have passed. Vitest starts successfully, but there are no test files yet.
-
-### API proxy
-
-The Vite development server is configured to forward `/api` requests to:
+The backend runs at:
 
 ```text
 http://localhost:8080
 ```
 
-This allows the frontend to communicate with the local Spring Boot backend.
-
----
-
-## 7. Running the Complete Application
-
-Open two VS Code terminals.
-
-**Terminal 1 — Backend**
-
-```powershell
-cd backend
-.\mvnw.cmd spring-boot:run
-```
-
-**Terminal 2 — Frontend**
-
-```powershell
-cd frontend
-npm run dev
-```
-
-Open the frontend:
-
-```text
-http://localhost:5173
-```
-
-The backend is available at:
-
-```text
-http://localhost:8080
-```
+On the first successful startup, Flyway applies the database migrations automatically.
 
 PostgreSQL must be running before starting the backend.
 
 ---
 
-## 8. Git Workflow
+# 8. Frontend Setup
 
-Check changes:
+The React/Vite frontend is already included in the repository.
 
-```powershell
-git status
-```
+You do **not** need to recreate the frontend.
 
-Stage files:
+Open a second PowerShell terminal:
 
 ```powershell
-git add .
+cd I-ITSM\frontend
 ```
 
-Commit:
+## 8.1 Install Dependencies
+
+Run:
 
 ```powershell
-git commit -m "Describe your changes"
+npm install
 ```
 
-Push:
+This installs the dependencies listed in `package.json` using `package-lock.json`.
+
+Do not commit `node_modules/`.
+
+## 8.2 Run the Frontend
+
+Run:
 
 ```powershell
-git push
+npm run dev
 ```
 
-Pull the latest shared changes:
+Vite normally starts the frontend at:
 
-```powershell
-git pull
+```text
+http://localhost:5173
 ```
 
-Never commit:
+The Vite development server forwards `/api` requests to the Spring Boot backend.
 
-- `application-local.yml`
-- Real database passwords or JWT secrets
-- `node_modules/`
-- `backend/target/`
-- `frontend/dist/`
+Therefore, the backend should normally be running at:
 
-The root `.gitignore` excludes these generated and sensitive files.
+```text
+http://localhost:8080
+```
+
+while the frontend is running.
 
 ---
 
-## 9. Current Setup Status
+# 9. Frontend Verification
 
-| Component | Status |
-|---|---|
-| Java 21 installation and PATH | Complete |
-| Maven Wrapper | Complete |
-| Spring Boot backend scaffold | Complete |
-| PostgreSQL 18.6 installation | Complete |
-| pgAdmin installation | Complete |
-| `iitsm` database creation | Complete |
-| Backend database connection | Verified |
-| Backend clean compile | Successful |
-| React + Vite scaffold | Complete |
-| Frontend build | Successful |
-| Frontend lint | Successful |
-| Frontend test configuration | Complete; test cases pending |
-| Database schema migrations | Pending |
-| Application features | Pending |
+The frontend uses Vitest and React Testing Library.
 
-**Note:** This guide describes the current development setup. Database tables, authentication, business logic, API endpoints and application functionality will be implemented in subsequent development phases.
+Run the production build:
+
+```powershell
+npm run build
+```
+
+Run linting:
+
+```powershell
+npm run lint
+```
+
+Run the frontend test suite:
+
+```powershell
+npm run test -- --run
+```
+
+A successful build and test run confirms that the frontend is correctly configured.
+
+---
+
+# 10. Running the Complete Application
+
+Use two PowerShell terminals.
+
+### Terminal 1 — Backend
+
+```powershell
+cd I-ITSM\backend
+.\mvnw.cmd spring-boot:run
+```
+
+The backend runs at:
+
+```text
+http://localhost:8080
+```
+
+### Terminal 2 — Frontend
+
+```powershell
+cd I-ITSM\frontend
+npm run dev
+```
+
+The frontend runs at:
+
+```text
+http://localhost:5173
+```
+
+Open the frontend URL in a browser.
+
+The complete application requires:
+
+```text
+PostgreSQL
+    ↓
+Spring Boot Backend
+    ↓
+React/Vite Frontend
+```
+
+---
+
+# 11. Demo Accounts
+
+The project includes seeded/demo users for testing the role-based workflows.
+
+### Employee
+
+```text
+Username: emp1
+Password: Employee@123
+```
+
+### Technician
+
+```text
+Username: tech1
+Password: Technician@123
+```
+
+### Team Lead
+
+```text
+Username: teamlead1
+Password: TeamLead@123
+```
+
+### IT Manager
+
+```text
+Username: itmanager1
+Password: ITManager@123
+```
+
+### Administrator
+
+Use the administrator credentials configured for the supplied environment.
+
+Do not commit private administrator credentials or other production secrets to the repository.
+
+---
+
+# 12. Main Application Features
+
+The completed application includes the following major functionality:
+
+- User registration and authentication
+- JWT-based authentication
+- Role-based access control
+- Employee, Technician, Team Lead, Administrator and IT Manager workflows
+- Incident creation and tracking
+- Incident classification
+- Priority calculation
+- Technician assignment and reassignment
+- Smart technician recommendation
+- Duplicate incident detection
+- Complete incident lifecycle management
+- Additional-information requests and responses
+- Investigation notes
+- Resolution and resolution rejection/re-resolution
+- Verification and feedback
+- SLA calculation and monitoring
+- SLA warnings and violations
+- Automatic escalation
+- In-app notifications
+- Simulated notification/email mechanisms
+- Audit trail
+- Server-side incident search and filtering
+- Dashboard and reporting
+- Administrative user/technician management
+- Assignment strategy management
+- SLA monitoring
+- PostgreSQL persistence
+
+---
+
+# 13. Troubleshooting
+
+## PostgreSQL connection failure
+
+Verify that:
+
+1. PostgreSQL is running.
+2. The database `iitsm` exists.
+3. PostgreSQL is listening on port `5432`.
+4. The username is `postgres`.
+5. The password in `application-local.yml` is correct.
+
+Expected connection URL:
+
+```text
+jdbc:postgresql://localhost:5432/iitsm
+```
+
+## Flyway migration failure
+
+If Flyway reports a migration or schema error:
+
+- Check that the `iitsm` database is accessible.
+- Check the backend logs for the specific migration failure.
+- Do not manually create the application tables.
+- Do not delete migration files from `backend/src/main/resources/db/migration/`.
+
+The migration history is part of the project's database design.
+
+## Frontend cannot reach the backend
+
+Verify that:
+
+```text
+Backend:  http://localhost:8080
+Frontend: http://localhost:5173
+```
+
+and that the Spring Boot backend is running before using the frontend.
+
+## Port already in use
+
+If port `8080` is already occupied, stop the process using that port before starting the backend.
+
+If port `5173` is occupied, Vite may automatically select another available development port.
+
+---
+
+# 14. Project Tests
+
+### Backend
+
+Run:
+
+```powershell
+cd backend
+.\mvnw.cmd clean test
+```
+
+### Frontend
+
+Run:
+
+```powershell
+cd frontend
+npm run test -- --run
+```
+
+### Frontend build
+
+```powershell
+npm run build
+```
+
+### Frontend lint
+
+```powershell
+npm run lint
+```
+
+The project includes automated tests covering core business rules, lifecycle transitions, persistence, security/RBAC, notifications, SLA behavior, search, intelligent features, and automatic escalation.
+
+---
+
+# 15. Security and Files That Must Not Be Committed
+
+Do not commit:
+
+```text
+application-local.yml
+real PostgreSQL passwords
+JWT secrets
+node_modules/
+frontend/dist/
+backend/target/
+```
+
+The repository should contain configuration templates and source code, not personal credentials or generated build artifacts.
+
+---
+
+# 16. Documentation
+
+Additional project documentation is available in:
+
+```text
+docs/
+```
+
+Important documents include:
+
+- `CONTRACT_FREEZE.md` — frozen project architecture and behavioral contracts
+- `IMPLEMENTATION_MANIFEST.md` — implementation status and project mapping
+- `api-contract.md` — API contracts
+- `priority-design.md` — priority calculation design
+- `sla-and-lifecycle-design.md` — SLA and incident lifecycle design
+- `test-cases.md` — documented meaningful test cases
+- `diagrams/` — project design diagrams
+
+---
+
+## 17. Final Run Checklist
+
+Before running the complete application, verify:
+
+```text
+[ ] Java 21 installed
+[ ] PostgreSQL installed and running
+[ ] Database "iitsm" created
+[ ] application-local.yml created with local PostgreSQL password
+[ ] Backend starts successfully
+[ ] Flyway migrations complete successfully
+[ ] Frontend dependencies installed with npm install
+[ ] Frontend starts successfully
+[ ] Backend tests pass
+[ ] Frontend tests pass
+[ ] Frontend build succeeds
+```
+
+Once these steps are complete, the I-ITSM application is ready to run locally.
