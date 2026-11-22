@@ -187,7 +187,7 @@ export default function IncidentDetailPage() {
       closedByRole: 'ADMINISTRATOR',
       closureNote: inc.closureNote,
     });
-  }, [currentUser, escalations]);
+  }, [currentUser]);
 
   const loadIncident = async () => {
     try {
@@ -245,7 +245,7 @@ export default function IncidentDetailPage() {
     return () => {
       ignore = true;
     };
-  }, [id, currentUser, resolveCloser]);
+  }, [id, currentUser?.id, currentUser?.role]);
 
   if (loading) {
     return <div style={{ padding: '60px', textAlign: 'center', color: '#64748b' }}>Loading incident {id}...</div>;
