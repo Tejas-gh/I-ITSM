@@ -4,6 +4,8 @@ import com.iitsm.application.command.CreateIncidentCommand;
 import com.iitsm.domain.exception.InvalidInputException;
 import com.iitsm.domain.exception.UnauthorizedOperationException;
 import com.iitsm.domain.exception.UserNotFoundException;
+import com.iitsm.domain.escalation.EscalationRecord;
+import com.iitsm.infrastructure.persistence.memory.InMemoryEscalationRepository;
 import com.iitsm.domain.incident.Incident;
 import com.iitsm.domain.incident.IncidentDraft;
 import com.iitsm.domain.model.*;
@@ -25,6 +27,8 @@ class IncidentSearchServiceTest {
     private ServiceFixture f;
     private SlaEvaluator slaEvaluator;
     private IncidentSearchService searchService;
+    private InMemoryEscalationRepository escalations;
+    private Technician teamLead;
 
     private Incident inc1; // Reported by EMP01, assigned to TECH01, P1
     private Incident inc2; // Reported by EMP02, assigned to TECH02, P2
@@ -35,7 +39,10 @@ class IncidentSearchServiceTest {
     void setUp() {
         f = new ServiceFixture();
         slaEvaluator = new SlaEvaluator();
-        searchService = new IncidentSearchService(f.incidents, f.users, slaEvaluator, f.clock);
+        escalations = new InMemoryEscalationRepository();
+        teamLead = TestData.teamLead("LEAD01");
+        f.users.save(teamLead);
+        searchService = new IncidentSearchService(f.incidents, f.users, slaEvaluator, f.clock, escalations);
 
         emp2 = TestData.employee("EMP02");
         f.users.save(emp2);
@@ -216,4 +223,59 @@ class IncidentSearchServiceTest {
         assertThrows(InvalidInputException.class, () ->
                 new IncidentSearchQuery(null, now.plusSeconds(10), now, null, null, null, null, null, null));
     }
+    @Test
+    @DisplayName("Team Lead sees assigned incidents and not unrelated incidents")
+    void teamLead_seesAssignedOnlyWithoutEscalation() {
+        // Move inc1 to the Team Lead so it is normally visible by assignment.
+        inc1.unassign();
+        inc1.assign(teamLead, f.clock.instant());
+
+        List<Incident> results = searchService.search(teamLead.getId(), IncidentSearchQuery.empty());
+
+        assertEquals(1, results.size());
+        assertEquals(inc1.getId(), results.get(0).getId());
+    }
+
+    @Test
+    @DisplayName("Team Lead sees an unassigned incident when latest escalation targets Team Lead")
+    void teamLead_seesUnassignedIncidentEscalatedToTeamLead() {
+        Instant now = f.clock.instant();
+        escalations.save(EscalationRecord.create(inc3.getId(), 1, Role.TEAM_LEAD, now, "L1 escalation"));
+
+        List<Incident> results = searchService.search(teamLead.getId(), IncidentSearchQuery.empty());
+
+        assertEquals(1, results.size());
+        assertEquals(inc3.getId(), results.get(0).getId());
+    }
+
+    @Test
+    @DisplayName("Latest L2 escalation removes Team Lead scoped discovery")
+    void teamLead_losesScopedVisibilityWhenL2BecomesLatest() {
+        Instant now = f.clock.instant();
+        escalations.save(EscalationRecord.create(inc3.getId(), 1, Role.TEAM_LEAD, now, "L1 escalation"));
+        escalations.save(EscalationRecord.create(inc3.getId(), 2, Role.ADMINISTRATOR, now.plus(Duration.ofMinutes(1)), "L2 escalation"));
+
+        List<Incident> results = searchService.search(teamLead.getId(), IncidentSearchQuery.empty());
+
+        assertTrue(results.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Escalated visibility still respects normal search filters")
+    void teamLead_escalatedVisibilityRespectsSearchFilters() {
+        Instant now = f.clock.instant();
+        escalations.save(EscalationRecord.create(inc3.getId(), 1, Role.TEAM_LEAD, now, "L1 escalation"));
+
+        IncidentSearchQuery matching = new IncidentSearchQuery(
+                null, null, null, null, inc3.getPriority(), null, null, null, null
+        );
+        IncidentSearchQuery nonMatching = new IncidentSearchQuery(
+                null, null, null, null, inc1.getPriority(), null, null, null, null
+        );
+
+        assertEquals(List.of(inc3.getId()), searchService.search(teamLead.getId(), matching)
+                .stream().map(Incident::getId).toList());
+        assertTrue(searchService.search(teamLead.getId(), nonMatching).isEmpty());
+    }
+
 }

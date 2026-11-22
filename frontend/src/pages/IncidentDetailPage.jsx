@@ -113,7 +113,6 @@ export default function IncidentDetailPage() {
   // Ownership & Role checks per §Q.2
   const isReporter = currentUser.id === incident.reporterId;
   const isAssignee = currentUser.id === incident.assignedTechnicianId;
-  const isTechnician = ROLE_GROUPS.TECHNICIAN.includes(currentUser.role);
   const isAdmin = ROLE_GROUPS.ADMINISTRATOR.includes(currentUser.role);
 
   // State checks per §J.1 & §J.2
@@ -127,6 +126,9 @@ export default function IncidentDetailPage() {
   const isResolved = status === INCIDENT_STATUS.RESOLVED;
   const isVerified = status === INCIDENT_STATUS.VERIFIED;
   const isClosed = status === INCIDENT_STATUS.CLOSED;
+  const latestEscalation = escalations.length > 0 ? escalations[escalations.length - 1] : null;
+  const isEscalatedToCurrentRole = !isClosed && latestEscalation?.targetRole === currentUser.role;
+  const hasTechnicianWorkflowAccess = isAssignee || isEscalatedToCurrentRole;
 
   // Actions execution
   const openModal = (config) => {
@@ -488,25 +490,25 @@ export default function IncidentDetailPage() {
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
             {/* Technician Actions */}
-            {isTechnician && isAssignee && isAssigned && (
+            {hasTechnicianWorkflowAccess && isAssigned && (
               <button onClick={handleAcknowledge} style={btnPrimary}>
                 ✓ Acknowledge Incident
               </button>
             )}
 
-            {isTechnician && isAssignee && isAcknowledged && (
+            {hasTechnicianWorkflowAccess && isAcknowledged && (
               <button onClick={handleStartWork} style={btnPrimary}>
                 ▶ Start Investigation
               </button>
             )}
 
-            {isTechnician && isAssignee && (isAcknowledged || isInProgress || isWaitingForUser) && (
+            {hasTechnicianWorkflowAccess && (isAcknowledged || isInProgress || isWaitingForUser) && (
               <button onClick={handleAddInvestigationNote} style={btnSecondary}>
                 📝 Add Investigation Note
               </button>
             )}
 
-            {isTechnician && isAssignee && isInProgress && (
+            {hasTechnicianWorkflowAccess && isInProgress && (
               <>
                 <button onClick={handleRequestInfo} style={btnWarning}>
                   ❓ Request Info from User
@@ -568,7 +570,7 @@ export default function IncidentDetailPage() {
             )}
 
             {/* If no action available for user */}
-            {!isAdmin && !isReporter && !isAssignee && (
+            {!isAdmin && !isReporter && !hasTechnicianWorkflowAccess && (
               <span style={{ fontSize: '13px', color: '#64748b', fontStyle: 'italic', alignSelf: 'center' }}>
                 You have read-only access to this incident. Switch user role in the top-right navbar to test workflow actions.
               </span>

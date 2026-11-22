@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.iitsm.application.service.IncidentPermissionPolicy;
+import com.iitsm.domain.escalation.EscalationRepository;
 import com.iitsm.application.service.IncidentSearchService;
 import com.iitsm.application.service.IncidentService;
 import com.iitsm.domain.assignment.AssignmentStrategy;
@@ -84,8 +85,8 @@ public class IncidentConfig {
     }
 
     @Bean
-    IncidentPermissionPolicy incidentPermissionPolicy() {
-        return new IncidentPermissionPolicy();
+    IncidentPermissionPolicy incidentPermissionPolicy(EscalationRepository escalationRepository) {
+        return new IncidentPermissionPolicy(escalationRepository);
     }
 
     @Bean
@@ -105,7 +106,8 @@ public class IncidentConfig {
 
     @Bean
     IncidentSearchService incidentSearchService(IncidentRepository incidents, UserRepository users,
-                                                SlaEvaluator slaEvaluator, Clock clock) {
-        return new IncidentSearchService(incidents, users, slaEvaluator, clock);
+                                                SlaEvaluator slaEvaluator, Clock clock,
+                                                EscalationRepository escalationRepository) {
+        return new IncidentSearchService(incidents, users, slaEvaluator, clock, escalationRepository);
     }
 }

@@ -2,6 +2,7 @@ package com.iitsm.application.service;
 
 import com.iitsm.domain.exception.InvalidInputException;
 import com.iitsm.domain.exception.UnauthorizedOperationException;
+import com.iitsm.domain.escalation.EscalationRecord;
 import com.iitsm.domain.incident.Incident;
 import com.iitsm.domain.incident.IncidentDraft;
 import com.iitsm.domain.model.Administrator;
@@ -15,19 +16,22 @@ import com.iitsm.domain.model.Urgency;
 import com.iitsm.domain.model.User;
 import com.iitsm.domain.priority.PriorityResult;
 import com.iitsm.support.TestData;
+import com.iitsm.infrastructure.persistence.memory.InMemoryEscalationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.time.Duration;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class IncidentPermissionPolicyTest {
 
-    private final IncidentPermissionPolicy policy = new IncidentPermissionPolicy();
+    private final InMemoryEscalationRepository escalationRepository = new InMemoryEscalationRepository();
+    private IncidentPermissionPolicy policy;
     private final Instant now = Instant.parse("2026-11-16T09:00:00Z");
 
     private Employee reporter;
@@ -41,6 +45,9 @@ class IncidentPermissionPolicyTest {
 
     @BeforeEach
     void setUp() {
+        escalationRepository.clear();
+        policy = new IncidentPermissionPolicy(escalationRepository);
+
         reporter = TestData.employee("EMP01");
         otherEmployee = TestData.employee("EMP02");
         assignee = TestData.technician("TECH01", 5);
@@ -167,6 +174,109 @@ class IncidentPermissionPolicyTest {
 
         assertThrows(UnauthorizedOperationException.class, () -> policy.check(otherTechnician, IncidentOperation.UPDATE_PRIORITY, incident));
         assertThrows(UnauthorizedOperationException.class, () -> policy.check(reporter, IncidentOperation.UPDATE_PRIORITY, incident));
+    }
+
+
+    @Test
+    @DisplayName("Team Lead remains scoped to assigned incidents unless the incident is escalated to Team Lead")
+    void teamLead_escalationGrantsScopedViewAndTechnicianWorkflow() {
+        assertThrows(UnauthorizedOperationException.class,
+                () -> policy.check(teamLead, IncidentOperation.VIEW, incident));
+        assertThrows(UnauthorizedOperationException.class,
+                () -> policy.check(teamLead, IncidentOperation.ACKNOWLEDGE, incident));
+
+        escalationRepository.save(EscalationRecord.create(
+                incident.getId(), 1, Role.TEAM_LEAD, now.plus(Duration.ofMinutes(5)), "L1 escalation"));
+
+        assertDoesNotThrow(() -> policy.check(teamLead, IncidentOperation.VIEW, incident));
+        for (IncidentOperation op : new IncidentOperation[]{
+                IncidentOperation.ACKNOWLEDGE,
+                IncidentOperation.START_WORK,
+                IncidentOperation.ADD_INVESTIGATION_NOTE,
+                IncidentOperation.REQUEST_INFO,
+                IncidentOperation.RESOLVE}) {
+            assertDoesNotThrow(() -> policy.check(teamLead, op, incident), "Failed for " + op);
+        }
+
+        assertThrows(UnauthorizedOperationException.class,
+                () -> policy.check(otherTechnician, IncidentOperation.VIEW, incident));
+    }
+
+    @Test
+    @DisplayName("Administrator receives only incident-scoped technician workflow authority at Level 2")
+    void administrator_level2EscalationGrantsScopedTechnicianWorkflow() {
+        for (IncidentOperation op : new IncidentOperation[]{
+                IncidentOperation.ACKNOWLEDGE,
+                IncidentOperation.START_WORK,
+                IncidentOperation.ADD_INVESTIGATION_NOTE,
+                IncidentOperation.REQUEST_INFO,
+                IncidentOperation.RESOLVE}) {
+            assertThrows(UnauthorizedOperationException.class,
+                    () -> policy.check(admin, op, incident), "Should reject non-escalated admin for " + op);
+        }
+
+        escalationRepository.save(EscalationRecord.create(
+                incident.getId(), 2, Role.ADMINISTRATOR, now.plus(Duration.ofMinutes(6)), "L2 escalation"));
+
+        assertDoesNotThrow(() -> policy.check(admin, IncidentOperation.VIEW, incident));
+        assertDoesNotThrow(() -> policy.check(admin, IncidentOperation.ACKNOWLEDGE, incident));
+        assertDoesNotThrow(() -> policy.check(admin, IncidentOperation.START_WORK, incident));
+        assertDoesNotThrow(() -> policy.check(admin, IncidentOperation.ADD_INVESTIGATION_NOTE, incident));
+        assertDoesNotThrow(() -> policy.check(admin, IncidentOperation.REQUEST_INFO, incident));
+        assertDoesNotThrow(() -> policy.check(admin, IncidentOperation.RESOLVE, incident));
+        assertDoesNotThrow(() -> policy.check(admin, IncidentOperation.ASSIGN, incident));
+    }
+
+    @Test
+    @DisplayName("IT Manager receives only incident-scoped technician workflow authority at Level 3")
+    void itManager_level3EscalationGrantsScopedTechnicianWorkflow() {
+        for (IncidentOperation op : new IncidentOperation[]{
+                IncidentOperation.ACKNOWLEDGE,
+                IncidentOperation.START_WORK,
+                IncidentOperation.ADD_INVESTIGATION_NOTE,
+                IncidentOperation.REQUEST_INFO,
+                IncidentOperation.RESOLVE}) {
+            assertThrows(UnauthorizedOperationException.class,
+                    () -> policy.check(itManager, op, incident), "Should reject non-escalated IT manager for " + op);
+        }
+
+        escalationRepository.save(EscalationRecord.create(
+                incident.getId(), 3, Role.IT_MANAGER, now.plus(Duration.ofMinutes(7)), "L3 escalation"));
+
+        assertDoesNotThrow(() -> policy.check(itManager, IncidentOperation.VIEW, incident));
+        assertDoesNotThrow(() -> policy.check(itManager, IncidentOperation.ACKNOWLEDGE, incident));
+        assertDoesNotThrow(() -> policy.check(itManager, IncidentOperation.START_WORK, incident));
+        assertDoesNotThrow(() -> policy.check(itManager, IncidentOperation.ADD_INVESTIGATION_NOTE, incident));
+        assertDoesNotThrow(() -> policy.check(itManager, IncidentOperation.REQUEST_INFO, incident));
+        assertDoesNotThrow(() -> policy.check(itManager, IncidentOperation.RESOLVE, incident));
+        assertDoesNotThrow(() -> policy.check(itManager, IncidentOperation.ASSIGN, incident));
+    }
+
+    @Test
+    @DisplayName("Escalation authority follows the latest escalation role and does not leak across incidents")
+    void escalationAuthority_isScopedToLatestIncidentEscalation() {
+        escalationRepository.save(EscalationRecord.create(
+                incident.getId(), 2, Role.ADMINISTRATOR, now.plus(Duration.ofMinutes(6)), "L2 escalation"));
+
+        assertThrows(UnauthorizedOperationException.class,
+                () -> policy.check(itManager, IncidentOperation.ACKNOWLEDGE, incident));
+        assertDoesNotThrow(() -> policy.check(admin, IncidentOperation.ACKNOWLEDGE, incident));
+
+        Incident unrelated = new Incident("INC1002",
+                TestData.draft(
+                        reporter,
+                        TestData.service("SRV-02", BusinessCriticality.MEDIUM),
+                        TestData.category("NETWORK"),
+                        Impact.HIGH,
+                        Urgency.HIGH,
+                        5),
+                new PriorityResult(18, PriorityLevel.P2),
+                now);
+        unrelated.classify();
+        unrelated.assign(otherTechnician, now.plusSeconds(30));
+
+        assertThrows(UnauthorizedOperationException.class,
+                () -> policy.check(admin, IncidentOperation.ACKNOWLEDGE, unrelated));
     }
 
     @ParameterizedTest

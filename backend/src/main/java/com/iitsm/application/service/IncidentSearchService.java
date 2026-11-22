@@ -3,7 +3,9 @@ package com.iitsm.application.service;
 import com.iitsm.domain.exception.InvalidInputException;
 import com.iitsm.domain.exception.UnauthorizedOperationException;
 import com.iitsm.domain.exception.UserNotFoundException;
+import com.iitsm.domain.escalation.EscalationRepository;
 import com.iitsm.domain.incident.Incident;
+import com.iitsm.domain.model.IncidentStatus;
 import com.iitsm.domain.model.Role;
 import com.iitsm.domain.model.User;
 import com.iitsm.domain.repository.IncidentRepository;
@@ -27,11 +29,20 @@ public final class IncidentSearchService {
     private final UserRepository userRepository;
     private final SlaEvaluator slaEvaluator;
     private final Clock clock;
+    private final EscalationRepository escalationRepository;
 
     public IncidentSearchService(IncidentRepository incidentRepository,
                                  UserRepository userRepository,
                                  SlaEvaluator slaEvaluator,
                                  Clock clock) {
+        this(incidentRepository, userRepository, slaEvaluator, clock, null);
+    }
+
+    public IncidentSearchService(IncidentRepository incidentRepository,
+                                 UserRepository userRepository,
+                                 SlaEvaluator slaEvaluator,
+                                 Clock clock,
+                                 EscalationRepository escalationRepository) {
         if (incidentRepository == null) {
             throw new InvalidInputException("incidentRepository must not be null");
         }
@@ -48,6 +59,7 @@ public final class IncidentSearchService {
         this.userRepository = userRepository;
         this.slaEvaluator = slaEvaluator;
         this.clock = clock;
+        this.escalationRepository = escalationRepository;
     }
 
     /**
@@ -76,11 +88,13 @@ public final class IncidentSearchService {
         String effectiveTechId = query.technicianId();
 
         if (role == Role.TECHNICIAN || role == Role.TEAM_LEAD) {
-            // A technician passing another technician's id gets an empty result
+            // A technician passing another technician's id gets an empty result.
             if (query.technicianId() != null && !query.technicianId().equals(actorId)) {
                 return List.of();
             }
-            effectiveTechId = actorId;
+            // With no explicit technician filter, fetch all query-matching incidents so
+            // scoped escalations can be added to the actor's normally assigned incidents.
+            effectiveTechId = query.technicianId();
         }
 
         IncidentSearchCriteria criteria = new IncidentSearchCriteria(
@@ -101,6 +115,15 @@ public final class IncidentSearchService {
 
         List<Incident> result = new ArrayList<>();
         for (Incident inc : candidates) {
+            // TEAM_LEAD/TECHNICIAN normally see assigned incidents, plus incidents
+            // whose latest persisted escalation targets their current role.
+            if ((role == Role.TECHNICIAN || role == Role.TEAM_LEAD)
+                    && query.technicianId() == null
+                    && !isAssignedToActor(inc, actorId)
+                    && !isEscalatedToRole(inc, role)) {
+                continue;
+            }
+
             // Role visibility filter for Employee (only reported incidents)
             if (role == Role.EMPLOYEE && !inc.getReporter().getId().equals(actorId)) {
                 continue;
@@ -122,5 +145,20 @@ public final class IncidentSearchService {
         }
 
         return Collections.unmodifiableList(result);
+    }
+
+    private boolean isAssignedToActor(Incident incident, String actorId) {
+        return incident.getAssignedTechnician()
+                .map(technician -> technician.getId().equals(actorId))
+                .orElse(false);
+    }
+
+    private boolean isEscalatedToRole(Incident incident, Role role) {
+        if (escalationRepository == null || incident.getStatus() == IncidentStatus.CLOSED) {
+            return false;
+        }
+        return escalationRepository.findLatestByIncidentId(incident.getId())
+                .map(record -> record.targetRole() == role)
+                .orElse(false);
     }
 }
