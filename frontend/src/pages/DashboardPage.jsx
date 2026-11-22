@@ -35,7 +35,13 @@ export default function DashboardPage() {
           isEmployee ? [] : slaApi.getViolations().catch(() => []),
           isAdmin ? dashboardApi.getTechnicianWorkloads().catch(() => []) : [],
         ]);
-        const visible = incList || [];
+        const visible = [...(incList || [])].sort((a, b) => {
+          if (b.createdAt && a.createdAt) {
+            const diff = new Date(b.createdAt) - new Date(a.createdAt);
+            if (diff !== 0) return diff;
+          }
+          return (b.id || '').localeCompare(a.id || '', undefined, { numeric: true });
+        });
         setIncidents(visible);
         setServices(srvList || []);
         // The SLA endpoints are not role-scoped: non-admins only count alerts of their own incidents

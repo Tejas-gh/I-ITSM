@@ -71,7 +71,17 @@ export default function IncidentListPage() {
       setError('');
       try {
         const list = await incidentApi.listVisibleIncidents(currentUser, toCriteria(applied));
-        if (!cancelled) setIncidents(list);
+        if (!cancelled) {
+          // Sort descending: newest incidents first (by createdAt or ID descending)
+          const sorted = [...(list || [])].sort((a, b) => {
+            if (b.createdAt && a.createdAt) {
+              const diff = new Date(b.createdAt) - new Date(a.createdAt);
+              if (diff !== 0) return diff;
+            }
+            return (b.id || '').localeCompare(a.id || '', undefined, { numeric: true });
+          });
+          setIncidents(sorted);
+        }
       } catch (err) {
         if (!cancelled) {
           setIncidents([]);
