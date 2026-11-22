@@ -109,20 +109,22 @@ export default function IncidentListPage() {
             Filtered by role permissions for <strong>{currentUser.name}</strong> ({currentUser.role})
           </p>
         </div>
-        <Link
-          to="/incidents/new"
-          style={{
-            backgroundColor: '#2563eb',
-            color: '#fff',
-            padding: '10px 18px',
-            borderRadius: '8px',
-            fontWeight: '600',
-            fontSize: '14px',
-            textDecoration: 'none',
-          }}
-        >
-          + Report Incident
-        </Link>
+        {currentUser?.role === 'EMPLOYEE' && (
+          <Link
+            to="/incidents/new"
+            style={{
+              backgroundColor: '#2563eb',
+              color: '#fff',
+              padding: '10px 18px',
+              borderRadius: '8px',
+              fontWeight: '600',
+              fontSize: '14px',
+              textDecoration: 'none',
+            }}
+          >
+            + Report Incident
+          </Link>
+        )}
       </div>
 
       {/* Search form: submitted to the backend (server-side search) */}

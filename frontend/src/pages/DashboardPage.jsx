@@ -125,9 +125,11 @@ export default function DashboardPage() {
           <span style={roleChipStyle}>{currentUser.role}</span>
         </p>
       </div>
-      <Link to="/incidents/new" style={primaryButtonStyle}>
-        <span>+</span> Report New Incident
-      </Link>
+      {isEmployee && (
+        <Link to="/incidents/new" style={primaryButtonStyle}>
+          <span>+</span> Report New Incident
+        </Link>
+      )}
     </div>
   );
 

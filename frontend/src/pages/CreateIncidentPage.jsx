@@ -166,6 +166,47 @@ export default function CreateIncidentPage() {
         </p>
       </div>
 
+      {currentUser?.role && currentUser.role !== 'EMPLOYEE' && (
+        <div
+          data-testid="non-employee-warning"
+          style={{
+            padding: '14px 18px',
+            backgroundColor: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: '8px',
+            color: '#92400e',
+            fontSize: '13px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <strong>⚠️ Incident reporting is intended for Employees only.</strong>
+            <div style={{ fontSize: '12px', marginTop: '2px', color: '#b45309' }}>
+              Your account is an active <strong>{currentUser.role}</strong> (supervisory / technical staff).
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: '#92400e',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: '600',
+              fontSize: '12px',
+              cursor: 'pointer',
+            }}
+          >
+            Return
+          </button>
+        </div>
+      )}
+
       {error && (
         <div
           style={{
